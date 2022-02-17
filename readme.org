@@ -20,12 +20,67 @@ to deviate from it all that much. Instead I'm going to incorporate a
 few Haml inspired directives for handling blocks and use slashes
 instead of asterisks for italics.
 
+* GML Grammar (BNF)
+#+begin_example
+<document> ::= <block> <eof>
+             | <block> <block>
+
+<block> ::= <heading> <text> <eol>
+          | <paragraph> <empty-line>
+          | "%title" <space> <text> <eol>
+          | "%subtitle" <space> <text> <eol>
+          | "%date" <space> <text> <eol>
+          | "%blockquote" <eol> <paragraph> <empty-line>
+          | "%footnotes" <eol> <paragraph> <empty-line>
+          | "%figure" <space> <href> <eol> <html> <eol> <caption> <empty-line>
+          | "%pre" <eol> <text> <empty-line>
+          | "%html" <eol> <text> <empty-line>
+
+<paragraph> ::= <styled-text>
+              | <styled-text> <url>
+              | <url> <styled-text>
+              | <ul> <footnote> <styled-text>
+              | <ol> <footnote> <styled-text>
+              | <paragraph> <paragraph>
+
+<styled-text> ::= <style> <eol>
+                | <text> <eol>
+                | <style> <styled-text>
+                | <text> <styled-text>
+
+<heading> ::= "*"
+            | "**"
+            | "***"
+
+<ul> ::= - <space> <text> <eol>
+<ol> ::= <number> "." <space> <text> <eol>
+<html> ::= "<img>"
+         | "<audio>"
+         | "<video>"
+
+<href> ::= ""
+         | <text>
+
+<caption> ::= ""
+            | <text>
+
+<footnote> ::= ""
+             | "[" <number> "]"
+
+<style> ::= "/" <text> "/"
+          | "*" <text> "*"
+          | "`" <text> "`"
+
+<url> ::= "[" <text> "]" (" <text> ")"
+#+end_example
+
+* Examples
 GML Example:
 #+begin_example
 %title The Gutenblog Markup Language (GML)
 %date 2022-02-15
 
-This is /my/ *markup language* called `GML`.
+This is /my/ *markup language* called ~GML~.
 
 Did you know that [my favorite website](https://example.com) is just an example?
 - Foo[1]
@@ -46,6 +101,12 @@ Example caption
 %figure
 <audio controls src="examples/t-rex-roar.mp3"></audio>
 Listen to the T-Rex
+
+%html
+<details>
+  <summary>Details</summary>
+    Something small enough to escape casual notice.
+</details>
 
 %footnotes
 - [1] Foo
@@ -94,6 +155,11 @@ func main() {
     <audio controls src="examples/t-rex-roar.mp3"></audio>
     <figcaption>Listen to the T-Rex</figcaption>
   </figure>
+
+  <details>
+    <summary>Details</summary>
+      Something small enough to escape casual notice.
+  </details>
 
   <footer>
     <ol>
