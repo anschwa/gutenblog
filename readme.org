@@ -22,47 +22,46 @@ instead of asterisks for italics.
 
 * GML Grammar (BNF)
 #+begin_example
-<document> ::= <block> <eof>
-             | <block> <block>
+<document> ::= <metadata> <content> <eof>
 
-<block> ::= <heading> <text> <eol>
-          | <paragraph> <empty-line>
-          | "%title" <space> <text> <eol>
-          | "%subtitle" <space> <text> <eol>
-          | "%date" <space> <text> <eol>
-          | "%blockquote" <eol> <paragraph> <empty-line>
-          | "%footnotes" <eol> <paragraph> <empty-line>
-          | "%figure" <space> <href> <eol> <html> <eol> <caption> <empty-line>
-          | "%pre" <eol> <text> <empty-line>
-          | "%html" <eol> <text> <empty-line>
+<metadata> ::= <key> <value> <eol>
+             | <key> <value> <eol> <metadata>
 
-<paragraph> ::= <styled-text>
-              | <styled-text> <url>
-              | <url> <styled-text>
-              | <ul> <footnote> <styled-text>
-              | <ol> <footnote> <styled-text>
-              | <paragraph> <paragraph>
+<content> ::= <block>
+            | <block> <block>
 
-<styled-text> ::= <style> <eol>
-                | <text> <eol>
-                | <style> <styled-text>
-                | <text> <styled-text>
+<block> ::= <heading> <styled-text> <eol>
+          | <paragraph>
+          | <list>
+          | <blockquote>
+          | <figure>
+          | <pre>
+          | <html>
+          | <footnotes>
 
-<heading> ::= "*"
-            | "**"
-            | "***"
+<paragraph> ::= <styled-text> <empty-line>
+              | <styled-text> <styled-text>
 
-<ul> ::= - <space> <text> <eol>
-<ol> ::= <number> "." <space> <text> <eol>
-<html> ::= "<img>"
-         | "<audio>"
-         | "<video>"
+<blockquote> ::= "%blockquote" <eol> <styled-text> <empty-line>
 
-<href> ::= ""
-         | <text>
+<figure> ::= "%figure" <arguments> <eol> <html> <eol> <caption> <empty-line>
 
-<caption> ::= ""
-            | <text>
+<pre> ::= "%pre" <eol> <text> <empty-line>
+
+<html> ::= "%html" <eol> <text> <empty-line>
+
+<footnotes> ::= "%footnotes" <eol> <list>
+
+<styled-text> ::= <text>
+                | <style>
+                | <url>
+                | <footnote>
+
+<list> ::= <list-item> <empty-line>
+         | <list-item> <list-item>
+
+<list-item> ::= "-" <styled-text> <eol>
+              | <number> "." <styled-text> <eol>
 
 <footnote> ::= ""
              | "[" <number> "]"
@@ -72,6 +71,23 @@ instead of asterisks for italics.
           | "`" <text> "`"
 
 <url> ::= "[" <text> "]" (" <text> ")"
+
+<key> ::= "%title"
+        | "%subtitle"
+        | "%date"
+
+<heading> ::= "*"
+            | "**"
+            | "***"
+
+<arguments> ::= ""
+              | <text>
+
+<caption> ::= ""
+            | <text>
+
+<value> ::= <text>
+<html> ::= <text>
 #+end_example
 
 * Examples
@@ -80,9 +96,10 @@ GML Example:
 %title The Gutenblog Markup Language (GML)
 %date 2022-02-15
 
-This is /my/ *markup language* called ~GML~.
+This is /my/ *markup language* called `GML`.
 
 Did you know that [my favorite website](https://example.com) is just an example?
+
 - Foo[1]
 - Bar[2]
 

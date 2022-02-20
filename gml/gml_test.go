@@ -1,4 +1,4 @@
-package gutenblog
+package gml
 
 import (
 	"strings"
@@ -13,6 +13,7 @@ var gml = `
 This is /my/ *markup language* called ~GML~.
 
 Did you know that [my favorite website](https://example.com) is just an example?
+
 - Foo[1]
 - Bar[2]
 
