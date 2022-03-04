@@ -8,8 +8,8 @@ quirks that I don't want to use them for this project.
 
 For Gutenblog v1.0 I chose to use raw, unaltered HTML. This was the
 simplest to implement and offered the most flexibility for publishing
-web pages. However, I think a plain-text markup language would be more
-ergonomic long-term and the semantic web is a lie anyway.
+web pages. However, I think a plain text markup language is more
+ergonomic and the semantic web is a lie anyway.
 
 Reasons why I am creating my own markup language:
 1. Org-mode is too verbose to write without help from ~emacs~.
@@ -17,8 +17,8 @@ Reasons why I am creating my own markup language:
 
 Because markdown is such a popular and familiar format, I'm not going
 to deviate from it all that much. Instead I'm going to incorporate a
-few Haml inspired directives for handling blocks and use slashes
-instead of asterisks for italics.
+few directives for handling blocks and use slashes instead of
+asterisks for italics.
 
 * GML Grammar (BNF)
 #+begin_example
