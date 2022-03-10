@@ -1,10 +1,24 @@
 package gml
 
 // Adapted from text/template/parse/lex.go
+//
+// This is closer to a partial parser to a traditional lexer.
+//
+// For now, lexer emits items that contain the primary structure of a
+// GML document. Such as headings, lists, paragraphs, and blocks.
+// However, it doesn't tokenize the text content itself. That is,
+// bold, italics, URLs, and footnotes are left as-is.
+//
+// Goals:
+// - Limit ambiguity
+// - Relevant error messages
+// - Keep it simple
+//
+// Hopefully this is a little more robust than a bunch of string
+// splitting and regular expressions.
 
 import (
 	"fmt"
-	"io"
 	"unicode"
 	"unicode/utf8"
 )
@@ -14,7 +28,6 @@ type itemType int
 const (
 	itemError itemType = iota
 	itemEOF
-	itemEOL
 	itemText
 	itemParagraph
 	itemHeadingOne
@@ -60,12 +73,10 @@ func (i item) String() string {
 	switch {
 	case i.typ == itemEOF:
 		return "EOF"
-	case i.typ == itemEOL:
-		return "EOL"
 	case i.typ == itemError:
 		return i.val
 	case i.typ > itemKeyword:
-		return fmt.Sprintf("<%s>", i.val)
+		return fmt.Sprintf("%%%s", i.val)
 	case len(i.val) > 10:
 		return fmt.Sprintf("%.10q...", i.val)
 	}
@@ -139,6 +150,16 @@ func (l *lexer) run() {
 	close(l.items)
 }
 
+func (l *lexer) nextItem() item {
+	return <-l.items
+}
+
+// drain reads out all items so the lexing goroutine can exit.
+func (l *lexer) drain() {
+	for range l.items {
+	}
+}
+
 func lexBlock(l *lexer) stateFn {
 	for {
 		switch r := l.next(); {
@@ -180,9 +201,14 @@ func lexKeyword(l *lexer) stateFn {
 	}
 
 	// Ignore spaces between key + value
-	for isSpace(l.next()) {
+	for {
+		if r := l.next(); !isSpace(r) {
+			l.backup()
+			break
+		} else if r == eof {
+			return l.errorf("unexpected eof while scanning keyword delimiter")
+		}
 	}
-	l.backup()
 
 	// Ignore keyword tokens
 	l.ignore()
@@ -203,9 +229,14 @@ func lexKeyword(l *lexer) stateFn {
 
 	// Special cases:
 	if key[word] == itemFootnotes {
-		for l.next() != '-' {
+		if isNewline(l.next()) && l.peek() != '-' {
+			return l.errorf("footnotes must be given as an unordered list")
+		} else {
+			// Move cursor to beginning of list
+			l.next()
 			l.ignore()
 		}
+
 		return lexUnorderedList
 	}
 
@@ -251,10 +282,20 @@ func lexHeading(l *lexer) stateFn {
 	}
 	level := len(l.input[l.start:l.pos])
 
-	// Consume space between heading level and text
-	for isSpace(l.next()) {
+	// Validate heading
+	if !isSpace(l.peek()) {
+		return lexParagraph // Whoops! Not a heading, must be a paragraph
 	}
-	l.backup()
+
+	// Consume all space between heading level and text
+	for {
+		if r := l.next(); !isSpace(r) {
+			l.backup()
+			break
+		} else if r == eof {
+			return l.errorf("unexpected eof while scanning heading delimiter")
+		}
+	}
 
 	// Ignore heading tokens
 	l.ignore()
@@ -283,15 +324,19 @@ func lexHeading(l *lexer) stateFn {
 
 func lexUnorderedList(l *lexer) stateFn {
 	// Validate ordered list identifier
-	if !isSpace(l.next()) {
-		l.backup()
+	if !isSpace(l.peek()) {
 		return lexParagraph // Whoops! Not a list, must be a paragraph
 	}
 
 	// Consume list item identifier
-	for isSpace(l.next()) {
+	for {
+		if r := l.next(); !isSpace(r) {
+			l.backup()
+			break
+		} else if r == eof {
+			return l.errorf("unexpected eof while scanning unordered list delimiter")
+		}
 	}
-	l.backup()
 	l.ignore()
 
 	for {
@@ -323,14 +368,18 @@ Loop:
 	}
 
 	// Validate ordered list identifier
-	if !isSpace(l.next()) {
-		l.backup()
+	if !isSpace(l.peek()) {
 		return lexParagraph // Not a list, must be a paragraph
 	}
 
-	for isSpace(l.next()) {
+	for {
+		if r := l.next(); !isSpace(r) {
+			l.backup()
+			break
+		} else if r == eof {
+			return l.errorf("unexpected eof while scanning ordered list delimiter")
+		}
 	}
-	l.backup()
 	l.ignore()
 
 	// Scan list item text
@@ -390,33 +439,4 @@ func isAlpha(r rune) bool {
 
 func isDigit(r rune) bool {
 	return unicode.IsDigit(r)
-}
-
-////////////////////////
-//                    //
-//     TRY IT OUT     //
-//                    //
-////////////////////////
-func Lex(r io.Reader) {
-	b, err := io.ReadAll(r)
-	if err != nil {
-		panic(err)
-	}
-
-	input := string(b)
-	fmt.Println(input) // TODO DEBUG ONLY
-
-	l := lex(input)
-
-	fmt.Println("LEX START")
-	for {
-		item := <-l.items
-		fmt.Printf("ITEM: %#v\n", item)
-
-		if item.typ == itemEOF || item.typ == itemError {
-			break
-		}
-	}
-
-	fmt.Println("LEX FINISHED")
 }
