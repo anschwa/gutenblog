@@ -20,6 +20,30 @@ type document struct {
 	content []Block
 }
 
+func (d *document) HTML() (string, error) {
+	var buf strings.Builder
+
+	buf.WriteString(`<article>`)
+	buf.WriteString("\n")
+
+	if _, err := d.metadata.WriteHTML(&buf); err != nil {
+		return "", err
+	}
+	buf.WriteString("\n")
+
+	for _, block := range d.content {
+		if _, err := block.WriteHTML(&buf); err != nil {
+			return "", err
+		}
+		buf.WriteString("\n")
+	}
+
+	buf.WriteString(`</article>`)
+	buf.WriteString("\n")
+
+	return buf.String(), nil
+}
+
 type metadata struct {
 	title    string
 	subtitle string
@@ -27,34 +51,38 @@ type metadata struct {
 	author   string
 }
 
-func (m *metadata) parse(x item) error {
-	switch x.typ {
-	case itemTitle:
-		m.title = x.val
-	case itemSubtitle:
-		m.subtitle = x.val
-	case itemDate:
-		dt, err := time.Parse("2006-01-02", x.val)
-		if err != nil {
-			return fmt.Errorf("invalid date format: want: YYYY-MM-DD; got: %s", x.val)
-		}
-		m.date = dt
-	case itemAuthor:
-		m.author = x.val
-	default:
-		return fmt.Errorf("unrecognized metadata")
-	}
-
-	return nil
-}
-
 func (m *metadata) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	b.WriteString(`<header>`)
-	fmt.Fprintf(&b, `<h1>%s</h1>`, m.title)
-	fmt.Fprintf(&b, `<time datetime="%s>%s</time>`, m.date.Format("2006-01-02"), m.date.Format("January 1, 2006"))
+	b.WriteString("\n")
+
+	if m.title != "" {
+		b.WriteString("\t")
+		fmt.Fprintf(&b, `<h1 class="title">%s</h1>`, m.title)
+		b.WriteString("\n")
+	}
+
+	if m.subtitle != "" {
+		b.WriteString("\t")
+		fmt.Fprintf(&b, `<p class="subtitle">%s</p>`, m.subtitle)
+		b.WriteString("\n")
+	}
+
+	if !m.date.IsZero() {
+		b.WriteString("\t")
+		fmt.Fprintf(&b, `<p class="pubdate"><time datetime="%s">%s</time></p>`, m.date.Format("2006-01-02"), m.date.Format("January 1, 2006"))
+		b.WriteString("\n")
+	}
+
+	if m.author != "" {
+		b.WriteString("\t")
+		fmt.Fprintf(&b, `<p class="author">%s</p>`, m.author)
+		b.WriteString("\n")
+	}
+
 	b.WriteString(`</header>`)
+	b.WriteString("\n")
 
 	return w.Write(b.Bytes())
 }
@@ -67,7 +95,10 @@ type heading struct {
 func (h *heading) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
-	fmt.Fprintf(&b, `<h%d>%s</h%d>`, h.level, textToHTML(h.text), h.level)
+	level := h.level + 1 // There should be only one <h1> per document
+
+	fmt.Fprintf(&b, `<h%d>%s</h%d>`, level, textToHTML(h.text), level)
+	b.WriteString("\n")
 	return w.Write(b.Bytes())
 }
 
@@ -79,10 +110,16 @@ func (l *unorderedList) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	b.WriteString(`<ul>`)
+	b.WriteString("\n")
+
 	for _, text := range l.items {
+		b.WriteString("\t")
 		fmt.Fprintf(&b, `<li>%s</li>`, textToHTML(text))
+		b.WriteString("\n")
 	}
+
 	b.WriteString(`</ul>`)
+	b.WriteString("\n")
 
 	return w.Write(b.Bytes())
 }
@@ -95,10 +132,16 @@ func (l *orderedList) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	b.WriteString(`<ol>`)
+	b.WriteString("\n")
+
 	for _, text := range l.items {
+		b.WriteString("\t")
 		fmt.Fprintf(&b, `<li>%s</li>`, textToHTML(text))
+		b.WriteString("\n")
 	}
+
 	b.WriteString(`</ol>`)
+	b.WriteString("\n")
 
 	return w.Write(b.Bytes())
 }
@@ -111,6 +154,7 @@ func (p *paragraph) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	fmt.Fprintf(&b, `<p>%s</p>`, textToHTML(p.text))
+	b.WriteString("\n")
 	return w.Write(b.Bytes())
 }
 
@@ -124,25 +168,36 @@ func (f *figure) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	b.WriteString(`<figure>`)
+	b.WriteString("\n")
 
 	reHref := regexp.MustCompile(`href="(.+)"`)
 	href := reHref.FindStringSubmatch(f.args)
 
 	if href != nil {
+		b.WriteString("\t")
 		fmt.Fprintf(&b, `<a href="%s">`, href[1])
+		b.WriteString("\n")
+		b.WriteString("\t") // Indent for next line
 	}
 
+	b.WriteString("\t")
 	b.WriteString(f.html)
+	b.WriteString("\n")
 
 	if href != nil {
+		b.WriteString("\t")
 		b.WriteString(`</a>`)
+		b.WriteString("\n")
 	}
 
 	if f.caption != "" {
+		b.WriteString("\t")
 		fmt.Fprintf(&b, `<figcaption>%s</figcaption>`, f.caption)
+		b.WriteString("\n")
 	}
 
 	b.WriteString(`</figure>`)
+	b.WriteString("\n")
 
 	return w.Write(b.Bytes())
 }
@@ -155,6 +210,7 @@ func (p *pre) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	fmt.Fprintf(&b, `<pre>%s</pre>`, p.text)
+	b.WriteString("\n")
 	return w.Write(b.Bytes())
 }
 
@@ -166,6 +222,8 @@ func (h *html) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	b.WriteString(h.text)
+	b.WriteString("\n")
+
 	return w.Write(b.Bytes())
 }
 
@@ -177,6 +235,8 @@ func (q *blockquote) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	fmt.Fprintf(&b, `<blockquote>%s</blockquote>`, q.text)
+	b.WriteString("\n")
+
 	return w.Write(b.Bytes())
 }
 
@@ -188,15 +248,27 @@ func (f *footnotes) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	b.WriteString(`<footer>`)
+	b.WriteString("\n")
+
+	b.WriteString("\t")
 	b.WriteString(`<ol>`)
+	b.WriteString("\n")
+
 	for i, text := range f.items {
 		id := i + 1 // Are you a Nihilist or Unitarian?
 
+		b.WriteString("\t\t")
 		fmt.Fprintf(&b, `<li id="fn.%d">%s <a href="#fnr.%d">⮐</a></li>`, id, textToHTML(text), id)
+		b.WriteString("\n")
 	}
+
+	b.WriteString("\t")
 	b.WriteString(`</ol>`)
+	b.WriteString("\n")
 
 	b.WriteString(`</footer>`)
+	b.WriteString("\n")
+
 	return w.Write(b.Bytes())
 }
 
@@ -233,214 +305,193 @@ func (p *parser) backup() {
 	p.peekCount++
 }
 
-func parse(s string) {
+func (p *parser) errorf(format string, args ...interface{}) {
+	format = fmt.Sprintf("token: %s:%d: %s", p.token[0], p.token[0].pos, format)
+	panic(fmt.Errorf(format, args...))
+}
+
+func (p *parser) parseMetadata(token item) {
+	// Skip empty entries
+	if token.val == "" {
+		return
+	}
+
+	switch token.typ {
+	case itemTitle:
+		p.doc.metadata.title = token.val
+	case itemSubtitle:
+		p.doc.metadata.subtitle = token.val
+	case itemDate:
+		dt, err := time.Parse("2006-01-02", token.val)
+		if err != nil {
+			p.errorf("invalid date format: want: YYYY-MM-DD; got: %s", token.val)
+			return
+		}
+		p.doc.metadata.date = dt
+	case itemAuthor:
+		p.doc.metadata.author = token.val
+	default:
+		p.errorf("unrecognized metadata")
+		return
+	}
+}
+
+func (p *parser) parseParagraph(token item) {
+	b := &paragraph{text: token.val}
+	p.doc.content = append(p.doc.content, b)
+}
+
+func (p *parser) parseHeading(token item) {
+	var level int
+
+	switch token.typ {
+	case itemHeadingOne:
+		level = 1
+	case itemHeadingTwo:
+		level = 2
+	case itemHeadingThree:
+		level = 3
+	default:
+		p.errorf("invalid heading level")
+	}
+
+	h := &heading{level: level, text: token.val}
+	p.doc.content = append(p.doc.content, h)
+}
+
+func (p *parser) collectItems(typ itemType) []string {
+	var items []string
+	for {
+		if li := p.next(); li.typ == typ {
+			items = append(items, li.val)
+		} else {
+			p.backup()
+			break
+		}
+	}
+
+	return items
+}
+
+func (p *parser) parseUnorderedList() {
+	items := p.collectItems(itemUnorderedList)
+	ul := &unorderedList{items}
+	p.doc.content = append(p.doc.content, ul)
+}
+
+func (p *parser) parseOrderedList() {
+	items := p.collectItems(itemOrderedList)
+	ol := &orderedList{items}
+	p.doc.content = append(p.doc.content, ol)
+}
+
+func (p *parser) parseFootnotes(token item) {
+	items := p.collectItems(itemUnorderedList)
+	fn := &footnotes{items}
+	p.doc.content = append(p.doc.content, fn)
+}
+
+func (p *parser) parseBlockquote(token item) {
+	items := p.collectItems(itemText)
+	bq := &blockquote{text: strings.Join(items, "\n")}
+	p.doc.content = append(p.doc.content, bq)
+}
+
+func (p *parser) parsePre(token item) {
+	items := p.collectItems(itemText)
+	pre := &pre{text: strings.Join(items, "\n")}
+	p.doc.content = append(p.doc.content, pre)
+}
+
+func (p *parser) parseHTML(token item) {
+	items := p.collectItems(itemText)
+	html := &html{text: strings.Join(items, "\n")}
+	p.doc.content = append(p.doc.content, html)
+}
+
+func (p *parser) parseFigure(token item) {
+	fig := &figure{args: token.val}
+
+	if t1 := p.next(); t1.typ == itemText {
+		fig.html = t1.val
+	}
+
+	if t2 := p.next(); t2.typ == itemText {
+		fig.caption = t2.val
+	} else {
+		p.backup() // No caption provided
+	}
+
+	p.doc.content = append(p.doc.content, fig)
+}
+
+func Parse(s string) (string, error) {
 	p := &parser{
 		lex: lex(s),
 	}
 
-	for {
-		tok := p.next()
-		if tok.typ == itemEOF {
-			break
-		}
-
+	for tok := p.next(); tok.typ != itemEOF; tok = p.next() {
 		switch tok.typ {
 		case itemTitle, itemSubtitle, itemDate, itemAuthor:
-			if err := p.doc.metadata.parse(tok); err != nil {
-				panic(err)
-			}
-
+			p.parseMetadata(tok)
 		case itemParagraph:
-			b := &paragraph{text: tok.val}
-			p.doc.content = append(p.doc.content, b)
-
-		case itemHeadingOne:
-			h := &heading{level: 1, text: tok.val}
-			p.doc.content = append(p.doc.content, h)
-
-		case itemHeadingTwo:
-			h := &heading{level: 2, text: tok.val}
-			p.doc.content = append(p.doc.content, h)
-
-		case itemHeadingThree:
-			h := &heading{level: 3, text: tok.val}
-			p.doc.content = append(p.doc.content, h)
-
+			p.parseParagraph(tok)
+		case itemHeadingOne, itemHeadingTwo, itemHeadingThree:
+			p.parseHeading(tok)
 		case itemUnorderedList:
-			var items []string
-
-			items = append(items, tok.val)
-			for {
-				if li := p.next(); li.typ == itemUnorderedList {
-					items = append(items, li.val)
-				} else {
-					p.backup()
-					break
-				}
-			}
-
-			ul := &unorderedList{items}
-			p.doc.content = append(p.doc.content, ul)
+			p.backup()
+			p.parseUnorderedList()
 		case itemOrderedList:
-			var items []string
-
-			items = append(items, tok.val)
-			for {
-				li := p.next()
-				if li.typ != itemOrderedList {
-					p.backup()
-					break
-				}
-				items = append(items, li.val)
-			}
-
-			ol := &orderedList{items}
-			p.doc.content = append(p.doc.content, ol)
-
+			p.backup()
+			p.parseOrderedList()
 		case itemFootnotes:
-			var items []string
-			for {
-				if li := p.next(); li.typ == itemUnorderedList {
-					items = append(items, li.val)
-				} else {
-					p.backup()
-					break
-				}
-			}
-
-			fn := &footnotes{items}
-			p.doc.content = append(p.doc.content, fn)
-
+			p.parseFootnotes(tok)
 		case itemFigure:
-			fig := &figure{args: tok.val}
-
-			if t1 := p.next(); t1.typ == itemText {
-				fig.html = t1.val
-			}
-
-			if t2 := p.next(); t2.typ == itemText {
-				fig.caption = t2.val
-			} else {
-				p.backup() // No caption provided
-			}
-
-			p.doc.content = append(p.doc.content, fig)
-
+			p.parseFigure(tok)
 		case itemBlockquote:
-			var text []string
-			for {
-				if t1 := p.next(); t1.typ == itemText {
-					text = append(text, t1.val)
-				} else {
-					p.backup()
-					break
-				}
-			}
-
-			bq := &blockquote{text: strings.Join(text, "\n")}
-			p.doc.content = append(p.doc.content, bq)
-
+			p.parseBlockquote(tok)
 		case itemPre:
-			var text []string
-			for {
-				if t1 := p.next(); t1.typ == itemText {
-					text = append(text, t1.val)
-				} else {
-					p.backup()
-					break
-				}
-			}
-
-			pre := &pre{text: strings.Join(text, "\n")}
-			p.doc.content = append(p.doc.content, pre)
-
+			p.parsePre(tok)
 		case itemHTML:
-			var text []string
-			for {
-				if t1 := p.next(); t1.typ == itemText {
-					text = append(text, t1.val)
-				} else {
-					p.backup()
-					break
-				}
-			}
-
-			html := &html{text: strings.Join(text, "\n")}
-			p.doc.content = append(p.doc.content, html)
-
+			p.parseHTML(tok)
 		default:
 			fmt.Println("Unimplemented:", tok) // Debug
 		}
 	}
 
 	// Done.
-	fmt.Println()
-
-	var buf strings.Builder
-	if _, err := p.doc.metadata.WriteHTML(&buf); err != nil {
-		panic(err)
-	}
-
-	for _, block := range p.doc.content {
-		if _, err := block.WriteHTML(&buf); err != nil {
-			panic(err)
-		}
-	}
-
-	// Pretty print HTML
-	html := buf.String()
-	var tags = [...]struct {
-		old, new string
-	}{
-		{"<header>", "<header>\n"},
-		{"</header>", "\n</header>\n\n"},
-		{"<footer>", "<footer>\n"},
-		{"</footer>", "\n</footer>"},
-		{"<figure>", "<figure>\n"},
-		{"</figure>", "\n</figure>\n\n"},
-		{"<figcaption>", "\n<figcaption>"},
-		{"</figcaption>", "</figcaption>"},
-		{"<blockquote>", "<blockquote>\n"},
-		{"</blockquote>", "\n</blockquote>\n\n"},
-		{"<pre>", "<pre>\n"},
-		{"</pre>", "\n</pre>\n\n"},
-		{"</h1>", "</h1>\n"},
-		{"</h2>", "</h2>\n"},
-		{"</h3>", "</h3>\n"},
-		{"</h4>", "</h4>\n"},
-		{"<p>", "<p>\n"},
-		{"</p>", "\n</p>\n\n"},
-		{"<ul>", "<ul>\n"},
-		{"</ul>", "</ul>\n\n"},
-		{"<ol>", "<ol>\n"},
-		{"</ol>", "</ol>\n\n"},
-		{"</li>", "</li>\n"},
-	}
-
-	for _, t := range tags {
-		html = strings.ReplaceAll(html, t.old, t.new)
-	}
-
-	fmt.Println(html)
+	return p.doc.HTML()
 }
 
 func textToHTML(s string) string {
-	// Keep it simple (revisit later with separate lexer)
+	// Keep it simple (TODO: better lexer)
 	var replacements = [...]struct {
 		re   *regexp.Regexp
 		repl string
 	}{
 		// (?s) sets DotNL flag on regexp to enable multi-line matches
-		{regexp.MustCompile(`/(.+)/`), `<em>$1</em>`},                                         // Italic
-		{regexp.MustCompile(`\*(.+)\*`), `<strong>$1</strong>`},                               // Bold
-		{regexp.MustCompile(`~(.+)~`), `<code>$1</code>`},                                     // Code
-		{regexp.MustCompile(`\[(.+)\]\((.+)\)`), `<a href="$2">$1</a>`},                       // URL
+		{regexp.MustCompile(`\s?/(.+)/`), `<em>$1</em>`},                                      // Italic
+		{regexp.MustCompile(`\s?\*(.+)\*`), `<strong>$1</strong>`},                            // Bold
+		{regexp.MustCompile(`\s?~(.+)~`), `<code>$1</code>`},                                  // Code (broken)
 		{regexp.MustCompile(`\[(\d+)\]`), `<a id="fnr.$1" href="#fn.$1"><sup>[$1]</sup></a>`}, // Footnote
 	}
 
 	withHTML := s
 	for _, sub := range replacements {
 		withHTML = sub.re.ReplaceAllString(withHTML, sub.repl)
+	}
+
+	// URLs
+	reURL := regexp.MustCompile(`\[(.*)\]\((.+)\)`)
+	if allURLs := reURL.FindAllStringSubmatch(withHTML, -1); allURLs != nil {
+		for _, match := range allURLs {
+			original, text, href := match[0], match[1], match[2]
+			if text == "" {
+				text = href
+			}
+
+			withHTML = strings.Replace(withHTML, original, fmt.Sprintf(`<a href="%s">%s</a>`, href, text), 1)
+		}
 	}
 
 	return withHTML

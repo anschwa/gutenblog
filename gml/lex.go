@@ -19,6 +19,7 @@ package gml
 
 import (
 	"fmt"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -80,6 +81,7 @@ func (i item) String() string {
 	case len(i.val) > 10:
 		return fmt.Sprintf("%.10q...", i.val)
 	}
+
 	return fmt.Sprintf("%q", i.val)
 }
 
@@ -195,7 +197,7 @@ func lexKeyword(l *lexer) stateFn {
 	}
 
 	// Check if metadata entry is valid
-	word := l.input[l.start:l.pos]
+	word := strings.ToLower(l.input[l.start:l.pos])
 	if _, ok := key[word]; !ok {
 		return l.errorf("unrecognized keyword: %q", word)
 	}
@@ -216,11 +218,9 @@ func lexKeyword(l *lexer) stateFn {
 	// Scan value
 	// Consume all chars until end of line
 	for {
-		if r := l.next(); isNewline(r) {
+		if r := l.next(); isNewline(r) || r == eof {
 			l.backup()
 			break
-		} else if r == eof {
-			return l.errorf("unexpected eof while scanning keyword arguments")
 		}
 	}
 
@@ -250,7 +250,11 @@ func lexKeyword(l *lexer) stateFn {
 			l.next()   // Consume newline from 'b'
 			l.ignore() // Move cursor to start of next block
 			return lexBlock
-		case a == eof || b == eof:
+		case a == eof:
+			l.emit(itemEOF)
+			return nil
+		case b == eof:
+			l.next() // Move cursor to EOF
 			l.emit(itemEOF)
 			return nil
 		default:
@@ -259,11 +263,9 @@ func lexKeyword(l *lexer) stateFn {
 			}
 
 			for {
-				if r := l.next(); isNewline(r) {
+				if r := l.next(); isNewline(r) || r == eof {
 					l.backup()
 					break
-				} else if r == eof {
-					return l.errorf("unexpected eof while scanning keyword block")
 				}
 			}
 
@@ -302,11 +304,9 @@ func lexHeading(l *lexer) stateFn {
 
 	// Scan heading text
 	for {
-		if r := l.next(); isNewline(r) {
+		if r := l.next(); isNewline(r) || r == eof {
 			l.backup()
 			break
-		} else if r == eof {
-			return l.errorf("unexpected eof while scanning heading")
 		}
 	}
 
@@ -340,11 +340,9 @@ func lexUnorderedList(l *lexer) stateFn {
 	l.ignore()
 
 	for {
-		if r := l.next(); isNewline(r) {
+		if r := l.next(); isNewline(r) || r == eof {
 			l.backup()
 			break
-		} else if r == eof {
-			return l.errorf("unexpected eof while scanning unordered list")
 		}
 	}
 
@@ -384,11 +382,9 @@ Loop:
 
 	// Scan list item text
 	for {
-		if r := l.next(); isNewline(r) {
+		if r := l.next(); isNewline(r) || r == eof {
 			l.backup()
 			break
-		} else if r == eof {
-			return l.errorf("unexpected eof while scanning ordered list")
 		}
 	}
 
@@ -409,16 +405,20 @@ func lexParagraph(l *lexer) stateFn {
 			l.next()
 			l.ignore()
 			return lexBlock
-		case a == eof || b == eof:
+		case a == eof:
+			l.emit(itemParagraph)
+			l.emit(itemEOF)
+			return nil
+		case b == eof:
+			l.emit(itemParagraph)
+			l.next() // Move cursor to EOF
 			l.emit(itemEOF)
 			return nil
 		default:
 			for {
-				if r := l.next(); isNewline(r) {
+				if r := l.next(); isNewline(r) || r == eof {
 					l.backup()
 					break
-				} else if r == eof {
-					return l.errorf("unexpected eof while scanning paragraph")
 				}
 			}
 		}
