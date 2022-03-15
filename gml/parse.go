@@ -39,8 +39,6 @@ func (d *document) HTML() (string, error) {
 	}
 
 	buf.WriteString(`</article>`)
-	buf.WriteString("\n")
-
 	return buf.String(), nil
 }
 
@@ -82,8 +80,6 @@ func (m *metadata) WriteHTML(w io.Writer) (int, error) {
 	}
 
 	b.WriteString(`</header>`)
-	b.WriteString("\n")
-
 	return w.Write(b.Bytes())
 }
 
@@ -98,7 +94,6 @@ func (h *heading) WriteHTML(w io.Writer) (int, error) {
 	level := h.level + 1 // There should be only one <h1> per document
 
 	fmt.Fprintf(&b, `<h%d>%s</h%d>`, level, textToHTML(h.text), level)
-	b.WriteString("\n")
 	return w.Write(b.Bytes())
 }
 
@@ -119,8 +114,6 @@ func (l *unorderedList) WriteHTML(w io.Writer) (int, error) {
 	}
 
 	b.WriteString(`</ul>`)
-	b.WriteString("\n")
-
 	return w.Write(b.Bytes())
 }
 
@@ -141,8 +134,6 @@ func (l *orderedList) WriteHTML(w io.Writer) (int, error) {
 	}
 
 	b.WriteString(`</ol>`)
-	b.WriteString("\n")
-
 	return w.Write(b.Bytes())
 }
 
@@ -154,7 +145,6 @@ func (p *paragraph) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	fmt.Fprintf(&b, `<p>%s</p>`, textToHTML(p.text))
-	b.WriteString("\n")
 	return w.Write(b.Bytes())
 }
 
@@ -197,8 +187,6 @@ func (f *figure) WriteHTML(w io.Writer) (int, error) {
 	}
 
 	b.WriteString(`</figure>`)
-	b.WriteString("\n")
-
 	return w.Write(b.Bytes())
 }
 
@@ -210,7 +198,6 @@ func (p *pre) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	fmt.Fprintf(&b, `<pre>%s</pre>`, p.text)
-	b.WriteString("\n")
 	return w.Write(b.Bytes())
 }
 
@@ -222,8 +209,6 @@ func (h *html) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	b.WriteString(h.text)
-	b.WriteString("\n")
-
 	return w.Write(b.Bytes())
 }
 
@@ -235,8 +220,6 @@ func (q *blockquote) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	fmt.Fprintf(&b, `<blockquote>%s</blockquote>`, q.text)
-	b.WriteString("\n")
-
 	return w.Write(b.Bytes())
 }
 
@@ -267,8 +250,6 @@ func (f *footnotes) WriteHTML(w io.Writer) (int, error) {
 	b.WriteString("\n")
 
 	b.WriteString(`</footer>`)
-	b.WriteString("\n")
-
 	return w.Write(b.Bytes())
 }
 
@@ -425,7 +406,7 @@ func (p *parser) parseFigure(token item) {
 	p.doc.content = append(p.doc.content, fig)
 }
 
-func Parse(s string) (string, error) {
+func Parse(s string) (document, error) {
 	p := &parser{
 		lex: lex(s),
 	}
@@ -460,7 +441,7 @@ func Parse(s string) (string, error) {
 	}
 
 	// Done.
-	return p.doc.HTML()
+	return p.doc, nil
 }
 
 func textToHTML(s string) string {
@@ -470,9 +451,9 @@ func textToHTML(s string) string {
 		repl string
 	}{
 		// (?s) sets DotNL flag on regexp to enable multi-line matches
-		{regexp.MustCompile(`\s?/(.+)/`), `<em>$1</em>`},                                      // Italic
-		{regexp.MustCompile(`\s?\*(.+)\*`), `<strong>$1</strong>`},                            // Bold
-		{regexp.MustCompile(`\s?~(.+)~`), `<code>$1</code>`},                                  // Code (broken)
+		{regexp.MustCompile(`(\s?)/(.+)/`), `$1<em>$2</em>`},                                  // Italic (broken)
+		{regexp.MustCompile(`(\s?)\*(.+)\*`), `$1<strong>$2</strong>`},                        // Bold
+		{regexp.MustCompile(`(\s?)~(.+)~`), `$1<code>$2</code>`},                              // Code (broken)
 		{regexp.MustCompile(`\[(\d+)\]`), `<a id="fnr.$1" href="#fn.$1"><sup>[$1]</sup></a>`}, // Footnote
 	}
 
