@@ -1,3 +1,80 @@
 #+title: Project Gutenblog
 #+date: February 15, 2022
 #+options: toc:nil
+
+* Solo-blog
+#+begin_src text
+Working directory:
+└── blog/
+    ├── posts/
+    │   └── hello-world/
+    │       └── hello-world.txt
+    └── www/
+        ├── assets/
+        │   └── logo.png
+        ├── css/
+        │   └── style.css
+        └── index.html
+
+Output directory:
+└── www/
+    ├── assets/
+    │   └── logo.png
+    ├── foo/
+    │   └── 2006/
+    │       └── 01/
+    │           └── 02/
+    │               └── hello-world/
+    │                   └── index.html
+    ├── css/
+    │   └── style.css
+    └── index.html
+#+end_src
+
+* Multi-blog
+#+begin_src text
+Working directory:
+└── site/
+    ├── blog/
+    │   ├── bar/
+    │   │   └── posts/
+    │   │       └── hello-bar/
+    │   │           └── hello-bar.txt
+    │   └── foo/
+    │       └── posts/
+    │           └── hello-foo/
+    │               └── hello-foo.txt
+    └── www/
+        ├── assets/
+        │   └── logo.png
+        ├── blog/
+        │   ├── bar/
+        │   │   └── index.html
+        │   ├── foo/
+        │   │   └── index.html
+        ├── css/
+        │   └── style.css
+        └── index.html
+
+Output directory:
+└── www/
+    ├── assets/
+    │   └── logo.png
+    ├── blog/
+    │   ├── bar/
+    │   │   └── index.html
+    │   │   └── 2006/
+    │   │       └── 01/
+    │   │           └── 02/
+    │   │               └── hello-bar/
+    │   │                   └── index.html
+    │   └── foo/
+    │       └── 2006/
+    │           └── 01/
+    │               └── 02/
+    │                   └── hello-foo/
+    │                       └── index.html
+    ├── css/
+    │   └── style.css
+    └── index.html
+#+end_src
