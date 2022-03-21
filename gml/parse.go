@@ -57,7 +57,7 @@ func (m *metadata) WriteHTML(w io.Writer) (int, error) {
 
 	if m.title != "" {
 		b.WriteString("\t")
-		fmt.Fprintf(&b, `<h1 class="title">%s</h1>`, m.title)
+		fmt.Fprintf(&b, `<h1 class="title" id="#%s">%s</h1>`, slugify(m.title), m.title)
 		b.WriteString("\n")
 	}
 
@@ -93,7 +93,7 @@ func (h *heading) WriteHTML(w io.Writer) (int, error) {
 
 	level := h.level + 1 // There should be only one <h1> per document
 
-	fmt.Fprintf(&b, `<h%d>%s</h%d>`, level, textToHTML(h.text), level)
+	fmt.Fprintf(&b, `<h%d id="#%s">%s</h%d>`, level, slugify(h.text), textToHTML(h.text), level)
 	return w.Write(b.Bytes())
 }
 
@@ -476,4 +476,28 @@ func textToHTML(s string) string {
 	}
 
 	return withHTML
+}
+
+// slugify creates a URL safe string by removing all non-alphanumeric
+// characters and replacing spaces with hyphens.
+func slugify(slug string) string {
+	// Remove leading and trailing spaces
+	slug = strings.TrimSpace(slug)
+
+	// Replace spaces with hyphens
+	reSpace := regexp.MustCompile(`[\t\n\f\r ]`)
+	slug = reSpace.ReplaceAllString(slug, "-")
+
+	// Remove duplicate hyphens
+	reDupDash := regexp.MustCompile(`-+`)
+	slug = reDupDash.ReplaceAllString(slug, "-")
+
+	// Remove non-word chars
+	reNonWord := regexp.MustCompile(`[^0-9A-Za-z_-]`)
+	slug = reNonWord.ReplaceAllString(slug, "")
+
+	// Lowercase
+	slug = strings.ToLower(slug)
+
+	return slug
 }

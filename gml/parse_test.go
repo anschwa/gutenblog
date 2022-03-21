@@ -21,7 +21,7 @@ var parseTests = []parseTest{
 
 		`<article>
 <header>
-	<h1 class="title">The Gutenblog Markup Language (GML)</h1>
+	<h1 class="title" id="#the-gutenblog-markup-language-gml">The Gutenblog Markup Language (GML)</h1>
 	<p class="subtitle">lorem ipsum</p>
 	<p class="pubdate"><time datetime="2006-01-02">January 1, 2006</time></p>
 	<p class="author">example</p>
@@ -56,6 +56,11 @@ var parseTests = []parseTest{
 		"url",
 		"[example](https://example.com)",
 		"<article>\n<header>\n</header>\n<p><a href=\"https://example.com\">example</a></p>\n</article>",
+	},
+	{
+		"heading",
+		"* Example Heading 123",
+		"<article>\n<header>\n</header>\n<h2 id=\"#example-heading-123\">Example Heading 123</h2>\n</article>",
 	},
 }
 

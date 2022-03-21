@@ -9,6 +9,11 @@ Working directory:
     ├── posts/
     │   └── hello-world/
     │       └── hello-world.txt
+    ├── tmpl/
+    │   ├── base.html.tmpl
+    │   ├── home.html.tmpl
+    │   └── post.html.tmpl
+    │
     └── www/
         ├── assets/
         │   └── logo.png
@@ -37,13 +42,22 @@ Working directory:
 └── site/
     ├── blog/
     │   ├── bar/
-    │   │   └── posts/
-    │   │       └── hello-bar/
-    │   │           └── hello-bar.txt
+    │   │   ├── posts/
+    │   │   │    └── hello-bar/
+    │   │   │        └── hello-bar.txt
+    │   │   └── tmpl/
+    │   │       ├── base.html.tmpl
+    │   │       ├── home.html.tmpl
+    │   │       └── post.html.tmpl
     │   └── foo/
-    │       └── posts/
-    │           └── hello-foo/
-    │               └── hello-foo.txt
+    │       ├── posts/
+    │       │     └── hello-foo/
+    │       │         └── hello-foo.txt
+    │       └── tmpl/
+    │           ├── base.html.tmpl
+    │           ├── home.html.tmpl
+    │           └── post.html.tmpl
+    │
     └── www/
         ├── assets/
         │   └── logo.png
