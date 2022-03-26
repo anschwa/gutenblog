@@ -21,7 +21,7 @@ var parseTests = []parseTest{
 
 		`<article>
 <header>
-	<h1 class="title" id="#the-gutenblog-markup-language-gml">The Gutenblog Markup Language (GML)</h1>
+	<h1 class="title" id="the-gutenblog-markup-language-gml">The Gutenblog Markup Language (GML) <a href="#the-gutenblog-markup-language-gml">¶</a></h1>
 	<p class="subtitle">lorem ipsum</p>
 	<p class="pubdate"><time datetime="2006-01-02">January 1, 2006</time></p>
 	<p class="author">example</p>
@@ -30,22 +30,27 @@ var parseTests = []parseTest{
 	},
 	{
 		"paragraph with styled text",
-		"this is /my/ *markup language* called ~GML~",
+		"this is /my/ *markup language* called ~GML~ ",
 		`<article>
 <header>
 </header>
-<p>this is <em>my</em> <strong>markup language</strong> called <code>GML</code></p>
+<p>this is <em>my</em> <strong>markup language</strong> called <code>GML</code> </p>
 </article>`,
 	},
 	{
 		"italics",
-		"/example/",
-		"<article>\n<header>\n</header>\n<p><em>example</em></p>\n</article>",
+		"/example/ ",
+		"<article>\n<header>\n</header>\n<p><em>example</em> </p>\n</article>",
 	},
 	{
 		"bold",
-		"*example*",
-		"<article>\n<header>\n</header>\n<p><strong>example</strong></p>\n</article>",
+		"*example* ",
+		"<article>\n<header>\n</header>\n<p><strong>example</strong> </p>\n</article>",
+	},
+	{
+		"code",
+		"~example~ ",
+		"<article>\n<header>\n</header>\n<p><code>example</code> </p>\n</article>",
 	},
 	{
 		"footnote",
@@ -58,9 +63,19 @@ var parseTests = []parseTest{
 		"<article>\n<header>\n</header>\n<p><a href=\"https://example.com\">example</a></p>\n</article>",
 	},
 	{
+		"url without display text uses full url",
+		"[](https://example.com)",
+		"<article>\n<header>\n</header>\n<p><a href=\"https://example.com\">https://example.com</a></p>\n</article>",
+	},
+	{
+		"url does not treat path as italics",
+		"[example](https://example.com/example/foo)",
+		"<article>\n<header>\n</header>\n<p><a href=\"https://example.com/example/foo\">example</a></p>\n</article>",
+	},
+	{
 		"heading",
 		"* Example Heading 123",
-		"<article>\n<header>\n</header>\n<h2 id=\"#example-heading-123\">Example Heading 123</h2>\n</article>",
+		"<article>\n<header>\n</header>\n<h2 id=\"example-heading-123\">Example Heading 123 <a href=\"#example-heading-123\">¶</a></h2>\n</article>",
 	},
 }
 

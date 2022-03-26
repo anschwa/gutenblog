@@ -1,3 +1,19 @@
 {{define "content"}}
-hello world!
+<h2>Welcome to my blog!</h2>
+
+{{- range $month := .Archive}}
+<h3><time datetime="{{$month.Date.ISO}}">{{$month.Title}}</time></h3>
+<ul>
+  {{- range $post := $month.Posts}}
+  <li>
+    <a href="/blog/rostock/{{$post.URL}}">{{$post.Title}}</a>,
+    <small>
+      <time datetime="{{$post.Date.ISO}}">
+        {{$post.Date.Short}}<sup>{{$post.Date.Suffix}}</sup>
+      </time>
+    </small>
+  </li>
+  {{- end}}
+</ul>
+{{- end}}
 {{end}}

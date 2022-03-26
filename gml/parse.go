@@ -10,14 +10,32 @@ import (
 )
 
 // The idea here is to transform a GML document into HTML.
+type Document interface {
+	Title() string
+	Subtitle() string
+	Date() time.Time
+	HTML() string
+}
 
-type Block interface {
+type block interface {
 	WriteHTML(w io.Writer) (int, error)
 }
 
 type document struct {
 	metadata
-	content []Block
+	content []block
+}
+
+func (d *document) Title() string {
+	return d.metadata.title
+}
+
+func (d *document) Subtitle() string {
+	return d.metadata.subtitle
+}
+
+func (d *document) Date() time.Time {
+	return d.metadata.date
 }
 
 func (d *document) HTML() (string, error) {
@@ -56,8 +74,12 @@ func (m *metadata) WriteHTML(w io.Writer) (int, error) {
 	b.WriteString("\n")
 
 	if m.title != "" {
+		ref := slugify(m.title)
+
 		b.WriteString("\t")
-		fmt.Fprintf(&b, `<h1 class="title" id="#%s">%s</h1>`, slugify(m.title), m.title)
+		fmt.Fprintf(&b, `<h1 class="title" id="%s">`, ref)
+		fmt.Fprintf(&b, `%s <a href="#%s">¶</a>`, m.title, ref)
+		b.WriteString(`</h1>`)
 		b.WriteString("\n")
 	}
 
@@ -69,7 +91,12 @@ func (m *metadata) WriteHTML(w io.Writer) (int, error) {
 
 	if !m.date.IsZero() {
 		b.WriteString("\t")
-		fmt.Fprintf(&b, `<p class="pubdate"><time datetime="%s">%s</time></p>`, m.date.Format("2006-01-02"), m.date.Format("January 1, 2006"))
+
+		b.WriteString(`<p class="pubdate">`)
+		fmt.Fprintf(&b, `<time datetime="%s">`, m.date.Format("2006-01-02"))
+		b.WriteString(m.date.Format("January 1, 2006"))
+		b.WriteString(`</time>`)
+		b.WriteString(`</p>`)
 		b.WriteString("\n")
 	}
 
@@ -92,8 +119,12 @@ func (h *heading) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
 	level := h.level + 1 // There should be only one <h1> per document
+	ref := slugify(h.text)
 
-	fmt.Fprintf(&b, `<h%d id="#%s">%s</h%d>`, level, slugify(h.text), textToHTML(h.text), level)
+	fmt.Fprintf(&b, `<h%d id="%s">`, level, ref)
+	fmt.Fprintf(&b, `%s <a href="#%s">¶</a>`, textToHTML(h.text), ref)
+	fmt.Fprintf(&b, `</h%d>`, level)
+
 	return w.Write(b.Bytes())
 }
 
@@ -219,7 +250,7 @@ type blockquote struct {
 func (q *blockquote) WriteHTML(w io.Writer) (int, error) {
 	var b bytes.Buffer
 
-	fmt.Fprintf(&b, `<blockquote>%s</blockquote>`, q.text)
+	fmt.Fprintf(&b, `<blockquote>%s</blockquote>`, textToHTML(q.text))
 	return w.Write(b.Bytes())
 }
 
@@ -450,10 +481,9 @@ func textToHTML(s string) string {
 		re   *regexp.Regexp
 		repl string
 	}{
-		// (?s) sets DotNL flag on regexp to enable multi-line matches
-		{regexp.MustCompile(`(\s?)/(.+)/`), `$1<em>$2</em>`},                                  // Italic (broken)
-		{regexp.MustCompile(`(\s?)\*(.+)\*`), `$1<strong>$2</strong>`},                        // Bold
-		{regexp.MustCompile(`(\s?)~(.+)~`), `$1<code>$2</code>`},                              // Code (broken)
+		{regexp.MustCompile(`(\s?)/(.+)/(\s)`), `$1<em>$2</em>$3`},                            // Italic (very broken)
+		{regexp.MustCompile(`(\s?)\*(.+)\*(\s)`), `$1<strong>$2</strong>$3`},                  // Bold
+		{regexp.MustCompile(`(\s?)~(.+)~(\s)`), `$1<code>$2</code>$3`},                        // Code (broken)
 		{regexp.MustCompile(`\[(\d+)\]`), `<a id="fnr.$1" href="#fn.$1"><sup>[$1]</sup></a>`}, // Footnote
 	}
 
@@ -478,8 +508,8 @@ func textToHTML(s string) string {
 	return withHTML
 }
 
-// slugify creates a URL safe string by removing all non-alphanumeric
-// characters and replacing spaces with hyphens.
+// slugify creates a URL safe string by removing
+// all non-alphanumeric characters and replacing spaces with hyphens.
 func slugify(slug string) string {
 	// Remove leading and trailing spaces
 	slug = strings.TrimSpace(slug)

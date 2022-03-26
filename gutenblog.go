@@ -5,6 +5,9 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/anschwa/gutenblog/gml"
 )
 
 // The idea is to walk through each blog directory, generate posts,
@@ -40,6 +43,97 @@ const (
 	RootDir = "examples/solo-blog"
 	OutDir  = "examples/solo-blog/outDir"
 )
+
+type tmplData struct {
+	DocumentTitle string
+	Archive       []postsByMonth
+	Post          gml.Document
+}
+
+type postData struct {
+	title string
+	slug  string
+	date  date
+}
+
+type postsByMonth struct {
+	Date  date
+	Posts postData
+}
+
+type date struct {
+	time.Time
+}
+
+func newDate(year int, month time.Month, day int) date {
+	return date{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
+}
+
+// ISO is a helper method for use in HTML templates
+func (d *date) ISO() string {
+	return d.Format("2006-01-02")
+}
+
+// Short is a helper method for use in HTML templates
+func (d *date) Short() string {
+	return d.Format("Jan _2")
+}
+
+// Suffix is a helper method for use in HTML templates
+func (d *date) Suffix() string {
+	switch d.Day() {
+	case 1, 21, 31:
+		return "st"
+	case 2, 22:
+		return "nd"
+	case 3, 23:
+		return "rd"
+	default:
+		return "th"
+	}
+}
+
+// func makeArchive(posts []blogPost) blogArchive {
+//	// Group all the posts by month
+//	monthMap := make(map[time.Time][]blogPost)
+//	for _, p := range posts {
+//		// Normalize all dates to YYYY-MM: truncate day, time, etc.
+//		t := p.Date.Time
+//		m := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+
+//		_, ok := monthMap[m]
+//		if !ok {
+//			monthMap[m] = []blogPost{}
+//		}
+
+//		monthMap[m] = append(monthMap[m], p)
+//	}
+
+//	// Sort monthMap by keys
+//	months := make([]time.Time, 0, len(monthMap))
+//	for t := range monthMap {
+//		months = append(months, t)
+//	}
+//	sort.SliceStable(months, func(i, j int) bool {
+//		return months[i].Before(months[j])
+//	})
+
+//	// Now build the sorted archive.
+//	archive := make(blogArchive, 0, len(monthMap))
+//	for _, m := range months {
+//		items := monthMap[m]
+//		sort.SliceStable(items, func(i, j int) bool {
+//			return items[i].Date.Before(items[j].Date.Time)
+//		})
+
+//		archive = append(archive, blogMonth{
+//			Date:  Date{m},
+//			Posts: items,
+//		})
+//	}
+
+//	return archive
+// }
 
 // mkdir is a wrapper around os.MkdirAll and os.Chmod to achieve
 // the same results as issuing "mkdir -p ..." from the command line
