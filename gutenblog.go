@@ -2,7 +2,10 @@ package gutenblog
 
 import (
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -23,9 +26,14 @@ import (
 //
 // Solo-blog:
 //  - Root directory contains "posts/"
+//  - gutenblog serve --name="My Blog" .
 //
 // Multi-blog:
 // - Root directory contains "blog/"
+// - gutenblog serve . \
+//       --blog='{dir: "blog/foo", name: "Foo the Blog"}' \
+//       --blog='{dir: "blog/bar", name: "Bar Bar Blog"}' \
+//       --addr=0.0.0.0:8080
 //
 // Templates:
 //   There are three HTML templates that are used for each blog: "base",
@@ -44,43 +52,172 @@ const (
 	OutDir  = "examples/solo-blog/outDir"
 )
 
-type tmplData struct {
-	DocumentTitle string
-	Archive       []postsByMonth
-	Post          gml.Document
+type site struct {
+	rootDir string
+	outDir  string
+	blogs   []*blog
 }
 
-type postData struct {
+type blog struct {
+	name    string         // Probably the directory name. Not used
+	posts   map[date]*post // Hold entire blog in memory?
+	archive map[time.Month][]date
+}
+
+type post struct {
 	title string
-	slug  string
-	date  date
+	href  string // Location of post once generated: /blog/foo/2006/01/02/hello-world
+	date  time.Time
+	body  gml.Document
 }
 
-type postsByMonth struct {
-	Date  date
-	Posts postData
+// 1. Determine solo vs multi blog
+// 2. Parse all blog posts for each blog
+// 3. Generate and serve site
+
+func Build() error {
+	var blogs []*blog
+
+	rootFiles, err := os.ReadDir(RootDir)
+	if err != nil {
+		return fmt.Errorf("error reading directory: %q; %w", RootDir, err)
+	}
+
+	// Check site type
+	var solo, multi bool
+	for _, f := range rootFiles {
+		if !f.IsDir() {
+			continue
+		}
+
+		switch f.Name() {
+		case "posts":
+			solo = true
+		case "blog":
+			multi = true
+		}
+	}
+
+	if solo && multi {
+		return fmt.Errorf(`error: site cannot have both a "posts" and a "blog" directory`)
+	}
+
+	switch {
+	case solo:
+		posts, err := getPosts(RootDir)
+		if err != nil {
+			return fmt.Errorf("error getting posts: %w", err)
+		}
+
+		postMap := make(map[date]*post, len(posts))
+		for i, p := range posts {
+			d := newDate(p.date.Year(), p.date.Month(), p.date.Day(), i) // Use iteration to disambiguate posts
+			postMap[d] = p
+		}
+
+		// var archive map[time.Month][]time.Time
+
+		b := &blog{
+			name:    RootDir,
+			posts:   postMap,
+			archive: nil,
+		}
+		blogs = append(blogs, b)
+	case multi:
+		// pass
+	default:
+		return fmt.Errorf(`error: site must have either a "posts" or "blog" directory but not both`)
+	}
+
+	s := &site{
+		rootDir: RootDir,
+		outDir:  OutDir,
+		blogs:   blogs,
+	}
+
+	fmt.Println(solo, multi)
+	fmt.Println(s)
+
+	blog := s.blogs[0]
+	for _, v := range blog.posts {
+		fmt.Println(v.body.HTML())
+	}
+
+	return nil
 }
 
-type date struct {
-	time.Time
+// getPosts walks a directory to find posts and parses any it finds
+func getPosts(path string) (posts []*post, err error) {
+	postsPath := filepath.Join(path, "posts")
+	walkFn := func(p string, d fs.DirEntry, err error) error {
+		name := d.Name()
+
+		if err != nil {
+			return fmt.Errorf("error reading %q: %w", name, err)
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return fmt.Errorf("error getting FileInfo for %q: %w", name, err)
+		}
+
+		// Parse post as GML
+		if info.Mode().IsRegular() && strings.HasSuffix(name, ".txt") {
+			f, err := os.Open(p)
+			if err != nil {
+				return fmt.Errorf("error opening %q: %w", name, err)
+			}
+
+			b, err := io.ReadAll(f)
+			if err != nil {
+				return fmt.Errorf("error reading %q: %w", name, err)
+			}
+
+			doc, err := gml.Parse(string(b))
+			if err != nil {
+				return fmt.Errorf("error parsing %q: %w", name, err)
+			}
+
+			p := &post{
+				title: doc.Title(),
+				date:  doc.Date(),
+				body:  doc,
+			}
+			posts = append(posts, p)
+		}
+
+		return nil
+	}
+
+	if err := filepath.WalkDir(postsPath, walkFn); err != nil {
+		return nil, fmt.Errorf("error walking %q: %w", postsPath, err)
+	}
+
+	return posts, nil
 }
 
-func newDate(year int, month time.Month, day int) date {
-	return date{Time: time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
+// date is a wrapper for time.Time for use in HTML templates
+type date struct{ time.Time }
+
+// newDate creates a wrapper around time.Time for each blog post using
+// sec to disambiguate posts from the same day. This is safe as long
+// as you don't publish 86,400 posts in one day.
+func newDate(year int, month time.Month, day int, sec int) date {
+	return date{Time: time.Date(year, month, day, 0, 0, sec, 0, time.UTC)}
 }
 
 // ISO is a helper method for use in HTML templates
-func (d *date) ISO() string {
+func (d date) ISO() string {
 	return d.Format("2006-01-02")
 }
 
 // Short is a helper method for use in HTML templates
-func (d *date) Short() string {
+func (d date) Short() string {
 	return d.Format("Jan _2")
 }
 
 // Suffix is a helper method for use in HTML templates
-func (d *date) Suffix() string {
+func (d date) Suffix() string {
 	switch d.Day() {
 	case 1, 21, 31:
 		return "st"

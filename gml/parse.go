@@ -14,7 +14,7 @@ type Document interface {
 	Title() string
 	Subtitle() string
 	Date() time.Time
-	HTML() string
+	HTML() (string, error)
 }
 
 type block interface {
@@ -26,19 +26,19 @@ type document struct {
 	content []block
 }
 
-func (d *document) Title() string {
+func (d document) Title() string {
 	return d.metadata.title
 }
 
-func (d *document) Subtitle() string {
+func (d document) Subtitle() string {
 	return d.metadata.subtitle
 }
 
-func (d *document) Date() time.Time {
+func (d document) Date() time.Time {
 	return d.metadata.date
 }
 
-func (d *document) HTML() (string, error) {
+func (d document) HTML() (string, error) {
 	var buf strings.Builder
 
 	buf.WriteString(`<article>`)
@@ -437,7 +437,7 @@ func (p *parser) parseFigure(token item) {
 	p.doc.content = append(p.doc.content, fig)
 }
 
-func Parse(s string) (document, error) {
+func Parse(s string) (Document, error) {
 	p := &parser{
 		lex: lex(s),
 	}
