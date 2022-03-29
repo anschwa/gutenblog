@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -59,15 +60,16 @@ type site struct {
 }
 
 type blog struct {
-	name    string         // Probably the directory name. Not used
-	posts   map[date]*post // Hold entire blog in memory?
-	archive map[time.Month][]date
+	name    string          // Probably the directory name. Not used
+	posts   map[pdate]*post // Hold entire blog in memory?
+	archive [][]pdate       // Posts sorted by Month+Year
 }
 
+type pdate date
 type post struct {
 	title string
 	href  string // Location of post once generated: /blog/foo/2006/01/02/hello-world
-	date  time.Time
+	date  pdate
 	body  gml.Document
 }
 
@@ -104,23 +106,9 @@ func Build() error {
 
 	switch {
 	case solo:
-		posts, err := getPosts(RootDir)
+		b, err := getBlog(RootDir)
 		if err != nil {
-			return fmt.Errorf("error getting posts: %w", err)
-		}
-
-		postMap := make(map[date]*post, len(posts))
-		for i, p := range posts {
-			d := newDate(p.date.Year(), p.date.Month(), p.date.Day(), i) // Use iteration to disambiguate posts
-			postMap[d] = p
-		}
-
-		// var archive map[time.Month][]time.Time
-
-		b := &blog{
-			name:    RootDir,
-			posts:   postMap,
-			archive: nil,
+			return fmt.Errorf("error getting blog from %q: %w", RootDir, err)
 		}
 		blogs = append(blogs, b)
 	case multi:
@@ -139,11 +127,82 @@ func Build() error {
 	fmt.Println(s)
 
 	blog := s.blogs[0]
+
+	for _, m := range blog.archive {
+		fmt.Println(date(m[0]).MonthYear())
+		for _, p := range m {
+			fmt.Println("\t", date(p).Short())
+		}
+	}
+
 	for _, v := range blog.posts {
 		fmt.Println(v.body.HTML())
 	}
 
 	return nil
+}
+
+// getBlog builds a blog from a given filepath
+func getBlog(path string) (*blog, error) {
+	posts, err := getPosts(path)
+	if err != nil {
+		return nil, fmt.Errorf("error getting posts: %w", err)
+	}
+
+	postMap := make(map[pdate]*post, len(posts))
+	for i, p := range posts {
+		// Use iteration to disambiguate posts
+		d := newDate(p.date.Year(), p.date.Month(), p.date.Day(), i)
+		postMap[pdate(d)] = p
+	}
+
+	b := &blog{
+		name:    RootDir,
+		posts:   postMap,
+		archive: getArchive(postMap),
+	}
+
+	return b, nil
+}
+
+// getArchive creates a sorted blog archive from a map of posts.
+func getArchive(posts map[pdate]*post) [][]pdate {
+	monthMap := make(map[time.Time][]pdate)
+
+	for d := range posts {
+		// Normalize all date buckets to YYYY-MM: truncate day, time, etc.
+		m := time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, d.Location())
+
+		if _, ok := monthMap[m]; !ok {
+			monthMap[m] = []pdate{}
+		}
+
+		monthMap[m] = append(monthMap[m], d)
+	}
+
+	// Sort monthMap by keys
+	months := make([]time.Time, 0, len(monthMap))
+	for m := range monthMap {
+		months = append(months, m)
+	}
+	sort.SliceStable(months, func(i, j int) bool {
+		return months[i].Before(months[j])
+	})
+
+	// We can sort all grouped posts in-place
+	for _, items := range monthMap {
+		sort.SliceStable(items, func(i, j int) bool {
+			return items[i].Before(items[j].Time)
+		})
+	}
+
+	// Build archive
+	var archive [][]pdate
+	for _, m := range months {
+		archive = append(archive, monthMap[m])
+	}
+
+	return archive
 }
 
 // getPosts walks a directory to find posts and parses any it finds
@@ -180,7 +239,7 @@ func getPosts(path string) (posts []*post, err error) {
 
 			p := &post{
 				title: doc.Title(),
-				date:  doc.Date(),
+				date:  pdate(date{Time: doc.Date()}),
 				body:  doc,
 			}
 			posts = append(posts, p)
@@ -196,7 +255,7 @@ func getPosts(path string) (posts []*post, err error) {
 	return posts, nil
 }
 
-// date is a wrapper for time.Time for use in HTML templates
+// date is a wrapper for time.Time that provides helper methods in HTML templates
 type date struct{ time.Time }
 
 // newDate creates a wrapper around time.Time for each blog post using
@@ -216,6 +275,11 @@ func (d date) Short() string {
 	return d.Format("Jan _2")
 }
 
+// MonthYear is a helper method for use in HTML templates
+func (d date) MonthYear() string {
+	return d.Format("January 2006")
+}
+
 // Suffix is a helper method for use in HTML templates
 func (d date) Suffix() string {
 	switch d.Day() {
@@ -229,48 +293,6 @@ func (d date) Suffix() string {
 		return "th"
 	}
 }
-
-// func makeArchive(posts []blogPost) blogArchive {
-//	// Group all the posts by month
-//	monthMap := make(map[time.Time][]blogPost)
-//	for _, p := range posts {
-//		// Normalize all dates to YYYY-MM: truncate day, time, etc.
-//		t := p.Date.Time
-//		m := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
-
-//		_, ok := monthMap[m]
-//		if !ok {
-//			monthMap[m] = []blogPost{}
-//		}
-
-//		monthMap[m] = append(monthMap[m], p)
-//	}
-
-//	// Sort monthMap by keys
-//	months := make([]time.Time, 0, len(monthMap))
-//	for t := range monthMap {
-//		months = append(months, t)
-//	}
-//	sort.SliceStable(months, func(i, j int) bool {
-//		return months[i].Before(months[j])
-//	})
-
-//	// Now build the sorted archive.
-//	archive := make(blogArchive, 0, len(monthMap))
-//	for _, m := range months {
-//		items := monthMap[m]
-//		sort.SliceStable(items, func(i, j int) bool {
-//			return items[i].Date.Before(items[j].Date.Time)
-//		})
-
-//		archive = append(archive, blogMonth{
-//			Date:  Date{m},
-//			Posts: items,
-//		})
-//	}
-
-//	return archive
-// }
 
 // mkdir is a wrapper around os.MkdirAll and os.Chmod to achieve
 // the same results as issuing "mkdir -p ..." from the command line

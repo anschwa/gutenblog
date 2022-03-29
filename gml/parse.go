@@ -74,12 +74,8 @@ func (m *metadata) WriteHTML(w io.Writer) (int, error) {
 	b.WriteString("\n")
 
 	if m.title != "" {
-		ref := slugify(m.title)
-
 		b.WriteString("\t")
-		fmt.Fprintf(&b, `<h1 class="title" id="%s">`, ref)
-		fmt.Fprintf(&b, `%s <a href="#%s">¶</a>`, m.title, ref)
-		b.WriteString(`</h1>`)
+		fmt.Fprintf(&b, `<h1 class="title">%s</h1>`, m.title)
 		b.WriteString("\n")
 	}
 
@@ -94,7 +90,7 @@ func (m *metadata) WriteHTML(w io.Writer) (int, error) {
 
 		b.WriteString(`<p class="pubdate">`)
 		fmt.Fprintf(&b, `<time datetime="%s">`, m.date.Format("2006-01-02"))
-		b.WriteString(m.date.Format("January 1, 2006"))
+		b.WriteString(m.date.Format("January 2, 2006"))
 		b.WriteString(`</time>`)
 		b.WriteString(`</p>`)
 		b.WriteString("\n")
@@ -121,8 +117,8 @@ func (h *heading) WriteHTML(w io.Writer) (int, error) {
 	level := h.level + 1 // There should be only one <h1> per document
 	ref := slugify(h.text)
 
-	fmt.Fprintf(&b, `<h%d id="%s">`, level, ref)
-	fmt.Fprintf(&b, `%s <a href="#%s">¶</a>`, textToHTML(h.text), ref)
+	fmt.Fprintf(&b, `<h%d id="%s" class="heading">`, level, ref)
+	fmt.Fprintf(&b, `%s <a class="heading-ref" href="#%s">¶</a>`, textToHTML(h.text), ref)
 	fmt.Fprintf(&b, `</h%d>`, level)
 
 	return w.Write(b.Bytes())
