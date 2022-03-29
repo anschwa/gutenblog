@@ -1,10 +1,15 @@
 package gutenblog
 
 import (
+	"context"
 	"fmt"
+	"html/template"
 	"io"
 	"io/fs"
+	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -42,7 +47,7 @@ import (
 //   that is in the blog's root directory.
 //
 //   - base.html.tmpl defines the main HTML layout for each page of the blog.
-//   - home.html.tmpl uses the "base" template and acts as the blog's home page.
+//   - home.html.tmpl uses the "base" template and acts as the blog's homepage.
 //   - post.html.tmpl uses the "base" template and provides the layout for each blog post.
 //
 // All content within the "www" directory is copied directly into the
@@ -59,6 +64,117 @@ type site struct {
 	blogs   []*blog
 }
 
+func (s *site) Generate() error {
+	blogRoot := filepath.Join(s.outDir, "blog")
+	if len(s.blogs) == 1 {
+		blogRoot = s.outDir // A solo-blog is the web root
+	}
+
+	for _, b := range s.blogs {
+		// Make sure output directory exists
+		if err := mkdir(blogRoot); err != nil {
+			return fmt.Errorf("error creating blogRoot (%s): %w", blogRoot, err)
+		}
+
+		baseTmplPath := filepath.Join(s.rootDir, "tmpl", "base.html.tmpl")
+		homeTmplPath := filepath.Join(s.rootDir, "tmpl", "home.html.tmpl")
+		postTmplPath := filepath.Join(s.rootDir, "tmpl", "post.html.tmpl")
+
+		// Generate blog home page
+		homePath := filepath.Join(blogRoot, "index.html")
+		w, err := os.Create(homePath)
+		if err != nil {
+			return fmt.Errorf("error creating homePath (%s): %w", homePath, err)
+		}
+		defer w.Close()
+
+		tmpl := template.Must(template.ParseFiles(baseTmplPath, homeTmplPath))
+		homeData := struct{}{}
+		if err := tmpl.ExecuteTemplate(w, "base", homeData); err != nil {
+			return fmt.Errorf("error generating homepage (%s): %w", homePath, err)
+		}
+
+		// Generate posts (goroutines someday)
+		for _, p := range b.posts {
+			writePost := func(p *post) error {
+				postDir := filepath.Join(blogRoot, p.date.Format("2006/01/02"), slugify(p.title))
+				if err := mkdir(postDir); err != nil {
+					return fmt.Errorf("error creating postDir (%s): %w", postDir, err)
+				}
+
+				postPath := filepath.Join(postDir, "index.html")
+				w, err = os.Create(postPath)
+				if err != nil {
+					return fmt.Errorf("error creating postPath (%s): %w", postPath, err)
+				}
+				defer w.Close()
+
+				tmpl := template.Must(template.ParseFiles(postTmplPath, baseTmplPath))
+				postData := struct{}{}
+				if err := tmpl.ExecuteTemplate(w, "base", postData); err != nil {
+					return fmt.Errorf("error generating post from template (%s): %w", postPath, err)
+				}
+
+				return nil
+			}
+
+			if err := writePost(p); err != nil {
+				return fmt.Errorf("error writing post (%s): %w", p.title, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *site) Serve(port string) {
+	fs := http.FileServer(http.Dir(s.outDir))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s\t%s", r.Method, r.URL)
+
+		// Regenerate the blog on with each request
+		if err := s.Generate(); err != nil {
+			log.Printf("Error generating blog: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// No caching during development
+		w.Header().Set("Expires", time.Unix(0, 0).Format(time.RFC1123))
+		w.Header().Set("Cache-Control", "no-cache, private, max-age=0")
+
+		fs.ServeHTTP(w, r)
+	})
+
+	// Adapted from:
+	// - https://pkg.go.dev/net/http#ServeMux
+	// - https://pkg.go.dev/net/http#Server.Shutdown
+	srv := &http.Server{
+		Addr:    "0.0.0.0:" + port,
+		Handler: mux,
+	}
+
+	idleConns := make(chan struct{})
+	go func() {
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt)
+		<-sigint
+
+		if err := srv.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down server: %v", err)
+		}
+		close(idleConns)
+	}()
+
+	log.Printf("Starting server on: %s [%s]", srv.Addr, s.outDir)
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		log.Fatalf("Error starting server: %v", err)
+	}
+
+	<-idleConns
+}
+
 type blog struct {
 	name    string          // Probably the directory name. Not used
 	posts   map[pdate]*post // Hold entire blog in memory?
@@ -68,7 +184,6 @@ type blog struct {
 type pdate date
 type post struct {
 	title string
-	href  string // Location of post once generated: /blog/foo/2006/01/02/hello-world
 	date  pdate
 	body  gml.Document
 }
@@ -139,6 +254,11 @@ func Build() error {
 		fmt.Println(v.body.HTML())
 	}
 
+	// s.Serve("8080")
+	if err := s.Generate(); err != nil {
+		return fmt.Errorf("error generating blog: %w", err)
+	}
+
 	return nil
 }
 
@@ -157,7 +277,7 @@ func getBlog(path string) (*blog, error) {
 	}
 
 	b := &blog{
-		name:    RootDir,
+		name:    path,
 		posts:   postMap,
 		archive: getArchive(postMap),
 	}
@@ -297,15 +417,19 @@ func (d date) Suffix() string {
 // mkdir is a wrapper around os.MkdirAll and os.Chmod to achieve
 // the same results as issuing "mkdir -p ..." from the command line
 func mkdir(dir string) error {
-	if err := os.MkdirAll((dir), os.ModePerm); err != nil {
+	if err := os.MkdirAll((dir), 0755); err != nil {
 		return fmt.Errorf("error creating directory %s: %w", dir, err)
 	}
 
-	// We need to update the directory permissions because we
-	// might lose the executable bit after umask is applied
-	if err := os.Chmod(dir, 0755); err != nil {
-		return fmt.Errorf("error setting permissions on %s: %w", dir, err)
-	}
+	// if err := os.MkdirAll((dir), os.ModePerm); err != nil {
+	//	return fmt.Errorf("error creating directory %s: %w", dir, err)
+	// }
+
+	// // We need to update the directory permissions because we
+	// // might lose the executable bit after umask is applied
+	// if err := os.Chmod(dir, 0755); err != nil {
+	//	return fmt.Errorf("error setting permissions on %s: %w", dir, err)
+	// }
 
 	return nil
 }
