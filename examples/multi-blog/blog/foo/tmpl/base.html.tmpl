@@ -6,17 +6,18 @@
     <link rel="icon" href="data:,">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>{{if ne $.DocumentTitle "" -}} {{$.DocumentTitle}} - {{end}}Solo Blog</title>
+    <title>{{- if ne $.DocumentTitle "" -}} {{$.DocumentTitle}} - {{- end -}}Foo's Blog</title>
   </head>
 
   <body>
     <header>
-      <h1><a href="/">Solo Blog</a></h1>
+      <h1><a href="/">Foo's Blog</a></h1>
     </header>
 
     <main role="main">
-      {{template "content" .}}
+      {{- template "content" -}}
     </main>
   </body>
+
 </html>
 {{- end}}

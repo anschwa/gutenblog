@@ -53,73 +53,133 @@ import (
 // All content within the "www" directory is copied directly into the
 // output directory as-is. Any custom web content should go there.
 
-const (
-	RootDir = "examples/solo-blog"
-	OutDir  = "examples/solo-blog/outDir"
-)
-
 type site struct {
 	rootDir string
 	outDir  string
 	blogs   []*blog
 }
 
-func (s *site) Generate() error {
-	blogRoot := filepath.Join(s.outDir, "blog")
+func (s *site) generate() error {
+	blogDirRoot := filepath.Join(s.outDir, "blog")
 	if len(s.blogs) == 1 {
-		blogRoot = s.outDir // A solo-blog is the web root
+		blogDirRoot = s.outDir // A solo-blog is the web root
 	}
 
 	for _, b := range s.blogs {
-		// Make sure output directory exists
-		if err := mkdir(blogRoot); err != nil {
-			return fmt.Errorf("error creating blogRoot (%s): %w", blogRoot, err)
+		blogWebRoot := "/"
+		if len(s.blogs) > 1 {
+			blogWebRoot = filepath.Join("/blog/", filepath.Base(b.name))
 		}
 
-		baseTmplPath := filepath.Join(s.rootDir, "tmpl", "base.html.tmpl")
-		homeTmplPath := filepath.Join(s.rootDir, "tmpl", "home.html.tmpl")
-		postTmplPath := filepath.Join(s.rootDir, "tmpl", "post.html.tmpl")
+		// Make sure output directory exists
+		if err := mkdir(blogDirRoot); err != nil {
+			return fmt.Errorf("error creating blogRoot %q: %w", blogDirRoot, err)
+		}
+
+		type archivePost struct {
+			Title string
+			URL   string
+			Date  date
+		}
+		type archiveMonth struct {
+			Title string
+			Posts []archivePost
+		}
+
+		var archive []archiveMonth
+		for _, dates := range b.archive {
+			first := dates[0]
+			m := archiveMonth{
+				Title: first.Format("January 2006"),
+				Posts: make([]archivePost, 0, len(dates)),
+			}
+			for _, d := range dates {
+				post := b.posts[d]
+				ap := archivePost{
+					Title: post.title,
+					URL:   filepath.Join(blogWebRoot, d.Format("2006/01/02"), slugify(post.title), "index.html"),
+					Date:  d,
+				}
+				m.Posts = append(m.Posts, ap)
+			}
+			archive = append(archive, m)
+		}
+
+		// TOOD: cleanup solo vs multi site root vs. blog root mess
+		baseTmplPath := filepath.Join(s.rootDir, blogWebRoot, "tmpl", "base.html.tmpl")
+		homeTmplPath := filepath.Join(s.rootDir, blogWebRoot, "tmpl", "home.html.tmpl")
+		postTmplPath := filepath.Join(s.rootDir, blogWebRoot, "tmpl", "post.html.tmpl")
 
 		// Generate blog home page
-		homePath := filepath.Join(blogRoot, "index.html")
-		w, err := os.Create(homePath)
-		if err != nil {
-			return fmt.Errorf("error creating homePath (%s): %w", homePath, err)
-		}
-		defer w.Close()
+		writeHome := func() error {
+			homePath := filepath.Join(blogDirRoot, "index.html")
+			w, err := os.Create(homePath)
+			if err != nil {
+				return fmt.Errorf("error creating homePath %q: %w", homePath, err)
+			}
+			defer w.Close()
 
-		tmpl := template.Must(template.ParseFiles(baseTmplPath, homeTmplPath))
-		homeData := struct{}{}
-		if err := tmpl.ExecuteTemplate(w, "base", homeData); err != nil {
-			return fmt.Errorf("error generating homepage (%s): %w", homePath, err)
+			tmpl := template.Must(template.ParseFiles(baseTmplPath, homeTmplPath))
+			homeData := struct {
+				DocumentTitle string
+				Posts         map[date]*post
+				Archive       []archiveMonth
+			}{
+				DocumentTitle: "",
+				Posts:         b.posts,
+				Archive:       archive,
+			}
+
+			if err := tmpl.ExecuteTemplate(w, "base", homeData); err != nil {
+				return fmt.Errorf("error executing template %q to %q: %w", homeTmplPath, homePath, err)
+			}
+
+			return nil
 		}
 
-		// Generate posts (goroutines someday)
+		if err := writeHome(); err != nil {
+			return fmt.Errorf("error writing homepage: %w", err)
+		}
+
+		// Generate posts (embarrassingly parallel)
 		for _, p := range b.posts {
 			writePost := func(p *post) error {
-				postDir := filepath.Join(blogRoot, p.date.Format("2006/01/02"), slugify(p.title))
+				postDir := filepath.Join(blogDirRoot, p.date.Format("2006/01/02"), slugify(p.title))
 				if err := mkdir(postDir); err != nil {
-					return fmt.Errorf("error creating postDir (%s): %w", postDir, err)
+					return fmt.Errorf("error creating postDir %q: %w", postDir, err)
 				}
 
 				postPath := filepath.Join(postDir, "index.html")
-				w, err = os.Create(postPath)
+				w, err := os.Create(postPath)
 				if err != nil {
-					return fmt.Errorf("error creating postPath (%s): %w", postPath, err)
+					return fmt.Errorf("error creating postPath %q: %w", postPath, err)
 				}
 				defer w.Close()
 
-				tmpl := template.Must(template.ParseFiles(postTmplPath, baseTmplPath))
-				postData := struct{}{}
+				postHTML := p.body.HTML(&gml.HTMLOptions{Minified: false})
+				postTmpl := template.Must(template.New("post").Parse(postHTML))
+				tmpl := template.Must(postTmpl.ParseFiles(baseTmplPath, postTmplPath))
+
+				postData := struct {
+					DocumentTitle string
+					PostHTML      string
+					Posts         map[date]*post
+					Archive       [][]date
+				}{
+					DocumentTitle: p.title,
+					PostHTML:      postHTML,
+					Posts:         b.posts,
+					Archive:       b.archive,
+				}
 				if err := tmpl.ExecuteTemplate(w, "base", postData); err != nil {
-					return fmt.Errorf("error generating post from template (%s): %w", postPath, err)
+					return fmt.Errorf("error executing template %q to %q: %w", postTmplPath, postPath, err)
 				}
 
 				return nil
 			}
 
 			if err := writePost(p); err != nil {
-				return fmt.Errorf("error writing post (%s): %w", p.title, err)
+				return fmt.Errorf("error writing post %q: %w", p.title, err)
 			}
 		}
 	}
@@ -127,14 +187,14 @@ func (s *site) Generate() error {
 	return nil
 }
 
-func (s *site) Serve(port string) {
+func (s *site) serve(port string) {
 	fs := http.FileServer(http.Dir(s.outDir))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s\t%s", r.Method, r.URL)
 
 		// Regenerate the blog on with each request
-		if err := s.Generate(); err != nil {
+		if err := s.generate(); err != nil {
 			log.Printf("Error generating blog: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -176,15 +236,15 @@ func (s *site) Serve(port string) {
 }
 
 type blog struct {
-	name    string          // Probably the directory name. Not used
-	posts   map[pdate]*post // Hold entire blog in memory?
-	archive [][]pdate       // Posts sorted by Month+Year
+	name    string         // The directory name (used for creating hyperlinks to blog posts)
+	posts   map[date]*post // Hold entire blog in memory?
+	archive [][]date       // Posts sorted by Month+Year
 }
 
-type pdate date
 type post struct {
 	title string
-	date  pdate
+	href  string
+	date  date
 	body  gml.Document
 }
 
@@ -192,12 +252,11 @@ type post struct {
 // 2. Parse all blog posts for each blog
 // 3. Generate and serve site
 
-func Build() error {
-	var blogs []*blog
-
-	rootFiles, err := os.ReadDir(RootDir)
+// isMultiBlog determines whether the target directory contains a solo or multi-blog layout.
+func isMultiBlog(rootDir string) (bool, error) {
+	rootFiles, err := os.ReadDir(rootDir)
 	if err != nil {
-		return fmt.Errorf("error reading directory: %q; %w", RootDir, err)
+		return false, fmt.Errorf("error reading directory: %q: %w", rootDir, err)
 	}
 
 	// Check site type
@@ -215,51 +274,78 @@ func Build() error {
 		}
 	}
 
-	if solo && multi {
-		return fmt.Errorf(`error: site cannot have both a "posts" and a "blog" directory`)
+	if solo == multi {
+		return false, fmt.Errorf(`site must have either a "posts" or "blog" directory but not both`)
 	}
 
-	switch {
-	case solo:
-		b, err := getBlog(RootDir)
+	return multi, nil
+}
+
+func newMultiSite(rootDir, outDir string) (*site, error) {
+	multiBlogPath := filepath.Join(rootDir, "blog")
+	multiBlogRootFiles, err := os.ReadDir(multiBlogPath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading directory %q: %w", multiBlogPath, err)
+	}
+
+	var blogDirs []string
+	for _, f := range multiBlogRootFiles {
+		if f.IsDir() {
+			blogDirs = append(blogDirs, f.Name())
+		}
+	}
+
+	blogs := make([]*blog, 0, len(blogDirs))
+	for _, dir := range blogDirs {
+		b, err := getBlog(filepath.Join(multiBlogPath, dir))
 		if err != nil {
-			return fmt.Errorf("error getting blog from %q: %w", RootDir, err)
+			return nil, fmt.Errorf("error getting blog from %q: %w", dir, err)
 		}
 		blogs = append(blogs, b)
-	case multi:
-		// pass
-	default:
-		return fmt.Errorf(`error: site must have either a "posts" or "blog" directory but not both`)
 	}
 
 	s := &site{
-		rootDir: RootDir,
-		outDir:  OutDir,
+		rootDir: rootDir,
+		outDir:  outDir,
 		blogs:   blogs,
 	}
 
-	fmt.Println(solo, multi)
-	fmt.Println(s)
+	return s, nil
+}
 
-	blog := s.blogs[0]
-
-	for _, m := range blog.archive {
-		fmt.Println(date(m[0]).MonthYear())
-		for _, p := range m {
-			fmt.Println("\t", date(p).Short())
-		}
+func newSoloSite(rootDir, outDir string) (*site, error) {
+	b, err := getBlog(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("error getting blog from %q: %w", rootDir, err)
 	}
 
-	for _, v := range blog.posts {
-		fmt.Println(v.body.HTML())
+	s := &site{
+		rootDir: rootDir,
+		outDir:  outDir,
+		blogs:   []*blog{b},
 	}
 
-	// s.Serve("8080")
-	if err := s.Generate(); err != nil {
-		return fmt.Errorf("error generating blog: %w", err)
+	return s, nil
+}
+
+func New(rootDir, outDir string) (*site, error) {
+	multi, err := isMultiBlog(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("error determining blog layout: %w", err)
 	}
 
-	return nil
+	var s *site
+	if multi {
+		s, err = newMultiSite(rootDir, outDir)
+	} else {
+		s, err = newSoloSite(rootDir, outDir)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error building site: %w", err)
+	}
+
+	s.serve("8080") // TODO: delete me
+	return s, nil
 }
 
 // getBlog builds a blog from a given filepath
@@ -269,11 +355,11 @@ func getBlog(path string) (*blog, error) {
 		return nil, fmt.Errorf("error getting posts: %w", err)
 	}
 
-	postMap := make(map[pdate]*post, len(posts))
+	postMap := make(map[date]*post, len(posts))
 	for i, p := range posts {
 		// Use iteration to disambiguate posts
 		d := newDate(p.date.Year(), p.date.Month(), p.date.Day(), i)
-		postMap[pdate(d)] = p
+		postMap[date(d)] = p
 	}
 
 	b := &blog{
@@ -286,15 +372,15 @@ func getBlog(path string) (*blog, error) {
 }
 
 // getArchive creates a sorted blog archive from a map of posts.
-func getArchive(posts map[pdate]*post) [][]pdate {
-	monthMap := make(map[time.Time][]pdate)
+func getArchive(posts map[date]*post) [][]date {
+	monthMap := make(map[time.Time][]date)
 
 	for d := range posts {
 		// Normalize all date buckets to YYYY-MM: truncate day, time, etc.
 		m := time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, d.Location())
 
 		if _, ok := monthMap[m]; !ok {
-			monthMap[m] = []pdate{}
+			monthMap[m] = []date{}
 		}
 
 		monthMap[m] = append(monthMap[m], d)
@@ -317,7 +403,7 @@ func getArchive(posts map[pdate]*post) [][]pdate {
 	}
 
 	// Build archive
-	var archive [][]pdate
+	var archive [][]date
 	for _, m := range months {
 		archive = append(archive, monthMap[m])
 	}
@@ -359,7 +445,7 @@ func getPosts(path string) (posts []*post, err error) {
 
 			p := &post{
 				title: doc.Title(),
-				date:  pdate(date{Time: doc.Date()}),
+				date:  date{doc.Date()},
 				body:  doc,
 			}
 			posts = append(posts, p)
@@ -420,16 +506,6 @@ func mkdir(dir string) error {
 	if err := os.MkdirAll((dir), 0755); err != nil {
 		return fmt.Errorf("error creating directory %s: %w", dir, err)
 	}
-
-	// if err := os.MkdirAll((dir), os.ModePerm); err != nil {
-	//	return fmt.Errorf("error creating directory %s: %w", dir, err)
-	// }
-
-	// // We need to update the directory permissions because we
-	// // might lose the executable bit after umask is applied
-	// if err := os.Chmod(dir, 0755); err != nil {
-	//	return fmt.Errorf("error setting permissions on %s: %w", dir, err)
-	// }
 
 	return nil
 }

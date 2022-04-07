@@ -14,11 +14,22 @@ type Document interface {
 	Title() string
 	Subtitle() string
 	Date() time.Time
-	HTML() (string, error)
+	HTML(opts *HTMLOptions) string
+}
+
+type HTMLOptions struct {
+	Minified bool
+}
+
+// writeStringUnminified will not write string s to io.Writer w when Minified is true
+func (opts *HTMLOptions) writeStringUnminified(w io.Writer, s string) {
+	if !opts.Minified {
+		w.Write([]byte(s))
+	}
 }
 
 type block interface {
-	WriteHTML(w io.Writer) (int, error)
+	WriteHTML(w io.Writer, opts *HTMLOptions) (int, error)
 }
 
 type document struct {
@@ -38,26 +49,32 @@ func (d document) Date() time.Time {
 	return d.metadata.date
 }
 
-func (d document) HTML() (string, error) {
+// HTML writes a GML document into HTML. As long as we are using
+// string buffers the error is always nil so it can be ignored.
+func (d document) HTML(opts *HTMLOptions) string {
 	var buf strings.Builder
 
-	buf.WriteString(`<article>`)
-	buf.WriteString("\n")
-
-	if _, err := d.metadata.WriteHTML(&buf); err != nil {
-		return "", err
+	if opts == nil {
+		opts = &HTMLOptions{}
 	}
-	buf.WriteString("\n")
+
+	buf.WriteString(`<article>`)
+	opts.writeStringUnminified(&buf, "\n")
+
+	if _, err := d.metadata.WriteHTML(&buf, opts); err != nil {
+		return "unreachable: DON'T PANIC"
+	}
+	opts.writeStringUnminified(&buf, "\n")
 
 	for _, block := range d.content {
-		if _, err := block.WriteHTML(&buf); err != nil {
-			return "", err
+		if _, err := block.WriteHTML(&buf, opts); err != nil {
+			return "unreachable: DON'T PANIC"
 		}
-		buf.WriteString("\n")
+		opts.writeStringUnminified(&buf, "\n")
 	}
 
 	buf.WriteString(`</article>`)
-	return buf.String(), nil
+	return buf.String()
 }
 
 type metadata struct {
@@ -67,39 +84,43 @@ type metadata struct {
 	author   string
 }
 
-func (m *metadata) WriteHTML(w io.Writer) (int, error) {
+func (m *metadata) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
 
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
+
 	b.WriteString(`<header>`)
-	b.WriteString("\n")
+	opts.writeStringUnminified(&b, "\n")
 
 	if m.title != "" {
-		b.WriteString("\t")
+		opts.writeStringUnminified(&b, "\t")
 		fmt.Fprintf(&b, `<h1 class="title">%s</h1>`, m.title)
-		b.WriteString("\n")
+		opts.writeStringUnminified(&b, "\n")
 	}
 
 	if m.subtitle != "" {
-		b.WriteString("\t")
+		opts.writeStringUnminified(&b, "\t")
 		fmt.Fprintf(&b, `<p class="subtitle">%s</p>`, m.subtitle)
-		b.WriteString("\n")
+		opts.writeStringUnminified(&b, "\n")
 	}
 
 	if !m.date.IsZero() {
-		b.WriteString("\t")
+		opts.writeStringUnminified(&b, "\t")
 
 		b.WriteString(`<p class="pubdate">`)
 		fmt.Fprintf(&b, `<time datetime="%s">`, m.date.Format("2006-01-02"))
 		b.WriteString(m.date.Format("January 2, 2006"))
 		b.WriteString(`</time>`)
 		b.WriteString(`</p>`)
-		b.WriteString("\n")
+		opts.writeStringUnminified(&b, "\n")
 	}
 
 	if m.author != "" {
-		b.WriteString("\t")
+		opts.writeStringUnminified(&b, "\t")
 		fmt.Fprintf(&b, `<p class="author">%s</p>`, m.author)
-		b.WriteString("\n")
+		opts.writeStringUnminified(&b, "\n")
 	}
 
 	b.WriteString(`</header>`)
@@ -111,8 +132,12 @@ type heading struct {
 	text  string
 }
 
-func (h *heading) WriteHTML(w io.Writer) (int, error) {
+func (h *heading) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
+
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
 
 	level := h.level + 1 // There should be only one <h1> per document
 	ref := slugify(h.text)
@@ -128,16 +153,20 @@ type unorderedList struct {
 	items []string
 }
 
-func (l *unorderedList) WriteHTML(w io.Writer) (int, error) {
+func (l *unorderedList) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
 
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
+
 	b.WriteString(`<ul>`)
-	b.WriteString("\n")
+	opts.writeStringUnminified(&b, "\n")
 
 	for _, text := range l.items {
-		b.WriteString("\t")
+		opts.writeStringUnminified(&b, "\t")
 		fmt.Fprintf(&b, `<li>%s</li>`, textToHTML(text))
-		b.WriteString("\n")
+		opts.writeStringUnminified(&b, "\n")
 	}
 
 	b.WriteString(`</ul>`)
@@ -148,16 +177,20 @@ type orderedList struct {
 	items []string
 }
 
-func (l *orderedList) WriteHTML(w io.Writer) (int, error) {
+func (l *orderedList) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
 
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
+
 	b.WriteString(`<ol>`)
-	b.WriteString("\n")
+	opts.writeStringUnminified(&b, "\n")
 
 	for _, text := range l.items {
-		b.WriteString("\t")
+		opts.writeStringUnminified(&b, "\t")
 		fmt.Fprintf(&b, `<li>%s</li>`, textToHTML(text))
-		b.WriteString("\n")
+		opts.writeStringUnminified(&b, "\n")
 	}
 
 	b.WriteString(`</ol>`)
@@ -168,8 +201,12 @@ type paragraph struct {
 	text string
 }
 
-func (p *paragraph) WriteHTML(w io.Writer) (int, error) {
+func (p *paragraph) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
+
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
 
 	fmt.Fprintf(&b, `<p>%s</p>`, textToHTML(p.text))
 	return w.Write(b.Bytes())
@@ -181,36 +218,40 @@ type figure struct {
 	caption string
 }
 
-func (f *figure) WriteHTML(w io.Writer) (int, error) {
+func (f *figure) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
 
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
+
 	b.WriteString(`<figure>`)
-	b.WriteString("\n")
+	opts.writeStringUnminified(&b, "\n")
 
 	reHref := regexp.MustCompile(`href="(.+)"`)
 	href := reHref.FindStringSubmatch(f.args)
 
 	if href != nil {
-		b.WriteString("\t")
+		opts.writeStringUnminified(&b, "\t")
 		fmt.Fprintf(&b, `<a href="%s">`, href[1])
-		b.WriteString("\n")
-		b.WriteString("\t") // Indent for next line
+		opts.writeStringUnminified(&b, "\n")
+		opts.writeStringUnminified(&b, "\t") // Indent for next line
 	}
 
-	b.WriteString("\t")
+	opts.writeStringUnminified(&b, "\t")
 	b.WriteString(f.html)
-	b.WriteString("\n")
+	opts.writeStringUnminified(&b, "\n")
 
 	if href != nil {
-		b.WriteString("\t")
+		opts.writeStringUnminified(&b, "\t")
 		b.WriteString(`</a>`)
-		b.WriteString("\n")
+		opts.writeStringUnminified(&b, "\n")
 	}
 
 	if f.caption != "" {
-		b.WriteString("\t")
+		opts.writeStringUnminified(&b, "\t")
 		fmt.Fprintf(&b, `<figcaption>%s</figcaption>`, f.caption)
-		b.WriteString("\n")
+		opts.writeStringUnminified(&b, "\n")
 	}
 
 	b.WriteString(`</figure>`)
@@ -221,8 +262,12 @@ type pre struct {
 	text string
 }
 
-func (p *pre) WriteHTML(w io.Writer) (int, error) {
+func (p *pre) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
+
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
 
 	fmt.Fprintf(&b, `<pre>%s</pre>`, p.text)
 	return w.Write(b.Bytes())
@@ -232,8 +277,12 @@ type html struct {
 	text string
 }
 
-func (h *html) WriteHTML(w io.Writer) (int, error) {
+func (h *html) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
+
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
 
 	b.WriteString(h.text)
 	return w.Write(b.Bytes())
@@ -243,8 +292,12 @@ type blockquote struct {
 	text string
 }
 
-func (q *blockquote) WriteHTML(w io.Writer) (int, error) {
+func (q *blockquote) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
+
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
 
 	fmt.Fprintf(&b, `<blockquote>%s</blockquote>`, textToHTML(q.text))
 	return w.Write(b.Bytes())
@@ -254,27 +307,31 @@ type footnotes struct {
 	items []string
 }
 
-func (f *footnotes) WriteHTML(w io.Writer) (int, error) {
+func (f *footnotes) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	var b bytes.Buffer
 
-	b.WriteString(`<footer>`)
-	b.WriteString("\n")
+	if opts == nil {
+		opts = &HTMLOptions{}
+	}
 
-	b.WriteString("\t")
+	b.WriteString(`<footer>`)
+	opts.writeStringUnminified(&b, "\n")
+
+	opts.writeStringUnminified(&b, "\t")
 	b.WriteString(`<ol>`)
-	b.WriteString("\n")
+	opts.writeStringUnminified(&b, "\n")
 
 	for i, text := range f.items {
 		id := i + 1 // Are you a Nihilist or Unitarian?
 
-		b.WriteString("\t\t")
+		opts.writeStringUnminified(&b, "\t\t")
 		fmt.Fprintf(&b, `<li id="fn.%d">%s <a href="#fnr.%d">⮐</a></li>`, id, textToHTML(text), id)
-		b.WriteString("\n")
+		opts.writeStringUnminified(&b, "\n")
 	}
 
-	b.WriteString("\t")
+	opts.writeStringUnminified(&b, "\t")
 	b.WriteString(`</ol>`)
-	b.WriteString("\n")
+	opts.writeStringUnminified(&b, "\n")
 
 	b.WriteString(`</footer>`)
 	return w.Write(b.Bytes())
@@ -314,7 +371,7 @@ func (p *parser) backup() {
 }
 
 func (p *parser) errorf(format string, args ...interface{}) {
-	format = fmt.Sprintf("token: %s:%d: %s", p.token[0], p.token[0].pos, format)
+	format = fmt.Sprintf("gml: token: %s:%d: %s", p.token[0], p.token[0].pos, format)
 	panic(fmt.Errorf(format, args...))
 }
 
@@ -481,6 +538,7 @@ func textToHTML(s string) string {
 		{regexp.MustCompile(`(\s?)\*(.+)\*(\s)`), `$1<strong>$2</strong>$3`},                  // Bold
 		{regexp.MustCompile(`(\s?)~(.+)~(\s)`), `$1<code>$2</code>$3`},                        // Code (broken)
 		{regexp.MustCompile(`\[(\d+)\]`), `<a id="fnr.$1" href="#fn.$1"><sup>[$1]</sup></a>`}, // Footnote
+		{regexp.MustCompile(`\n`), ``},                                                        // Strip newlines
 	}
 
 	withHTML := s
