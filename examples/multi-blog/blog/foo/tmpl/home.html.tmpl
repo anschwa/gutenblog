@@ -2,16 +2,12 @@
 <h2>Welcome to my blog!</h2>
 
 {{- range $month := .Archive}}
-<h3><time datetime="{{$month.Date.ISO}}">{{$month.Title}}</time></h3>
+<h3>{{$month.Title}}</h3>
 <ul>
   {{- range $post := $month.Posts}}
   <li>
-    <a href="/blog/rostock/{{$post.URL}}">{{$post.Title}}</a>,
-    <small>
-      <time datetime="{{$post.Date.ISO}}">
-        {{$post.Date.Short}}<sup>{{$post.Date.Suffix}}</sup>
-      </time>
-    </small>
+    <a href="{{$post.URL}}">{{$post.Title}}</a>,
+    <small>{{$post.Date.Short}}<sup>{{$post.Date.Suffix}}</sup></small>
   </li>
   {{- end}}
 </ul>

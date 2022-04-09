@@ -59,6 +59,59 @@ type site struct {
 	blogs   []*blog
 }
 
+type TmplArchive []struct {
+	Title string
+	Posts []struct {
+		Title string
+		URL   string
+		Date  date
+	}
+}
+
+func (b *blog) tmplArchive(webRoot string) TmplArchive {
+	archive := make(TmplArchive, 0, len(b.archive))
+
+	for _, dates := range b.archive {
+		first := dates[0]
+
+		month := struct {
+			Title string
+			Posts []struct {
+				Title string
+				URL   string
+				Date  date
+			}
+		}{
+			Title: first.Format("January 2006"),
+			Posts: make([]struct {
+				Title string
+				URL   string
+				Date  date
+			}, 0, len(dates)),
+		}
+
+		for _, d := range dates {
+			post := b.posts[d]
+			ap := struct {
+				Title string
+				URL   string
+				Date  date
+			}{
+				Title: post.title,
+				URL:   filepath.Join(webRoot, d.Format("2006/01/02"), slugify(post.title), "index.html"),
+				Date:  d,
+			}
+			month.Posts = append(month.Posts, ap)
+		}
+		archive = append(archive, month)
+	}
+
+	return archive
+}
+
+// generate builds all blog posts and copies any static assets from
+// the www directory into outDir. generate will overwrite all existing
+// content within outDir but will create the directory if it does not yet exist.
 func (s *site) generate() error {
 	blogDirRoot := filepath.Join(s.outDir, "blog")
 	if len(s.blogs) == 1 {
@@ -74,35 +127,6 @@ func (s *site) generate() error {
 		// Make sure output directory exists
 		if err := mkdir(blogDirRoot); err != nil {
 			return fmt.Errorf("error creating blogRoot %q: %w", blogDirRoot, err)
-		}
-
-		type archivePost struct {
-			Title string
-			URL   string
-			Date  date
-		}
-		type archiveMonth struct {
-			Title string
-			Posts []archivePost
-		}
-
-		var archive []archiveMonth
-		for _, dates := range b.archive {
-			first := dates[0]
-			m := archiveMonth{
-				Title: first.Format("January 2006"),
-				Posts: make([]archivePost, 0, len(dates)),
-			}
-			for _, d := range dates {
-				post := b.posts[d]
-				ap := archivePost{
-					Title: post.title,
-					URL:   filepath.Join(blogWebRoot, d.Format("2006/01/02"), slugify(post.title), "index.html"),
-					Date:  d,
-				}
-				m.Posts = append(m.Posts, ap)
-			}
-			archive = append(archive, m)
 		}
 
 		// TOOD: cleanup solo vs multi site root vs. blog root mess
@@ -123,11 +147,11 @@ func (s *site) generate() error {
 			homeData := struct {
 				DocumentTitle string
 				Posts         map[date]*post
-				Archive       []archiveMonth
+				Archive       TmplArchive
 			}{
 				DocumentTitle: "",
 				Posts:         b.posts,
-				Archive:       archive,
+				Archive:       b.tmplArchive(blogWebRoot),
 			}
 
 			if err := tmpl.ExecuteTemplate(w, "base", homeData); err != nil {
@@ -247,10 +271,6 @@ type post struct {
 	date  date
 	body  gml.Document
 }
-
-// 1. Determine solo vs multi blog
-// 2. Parse all blog posts for each blog
-// 3. Generate and serve site
 
 // isMultiBlog determines whether the target directory contains a solo or multi-blog layout.
 func isMultiBlog(rootDir string) (bool, error) {
