@@ -364,6 +364,11 @@ func New(rootDir, outDir string) (*site, error) {
 		return nil, fmt.Errorf("error building site: %w", err)
 	}
 
+	webDir := filepath.Join(s.rootDir, "www")
+	if err := cpdir(webDir, s.outDir); err != nil {
+		return nil, fmt.Errorf("error copying %q to %q : %w", webDir, s.outDir, err)
+	}
+
 	s.serve("8080") // TODO: delete me
 	return s, nil
 }
@@ -520,14 +525,68 @@ func (d date) Suffix() string {
 	}
 }
 
-// mkdir is a wrapper around os.MkdirAll and os.Chmod to achieve
-// the same results as issuing "mkdir -p ..." from the command line
-func mkdir(dir string) error {
-	if err := os.MkdirAll((dir), 0755); err != nil {
-		return fmt.Errorf("error creating directory %s: %w", dir, err)
+// mkdir is a wrapper around os.MkdirAll
+func mkdir(path string) error {
+	if err := os.MkdirAll((path), 0755); err != nil {
+		return fmt.Errorf("error creating directory %q: %w", path, err)
 	}
 
 	return nil
+}
+
+// cpdir recursively copies the contents of src into dst. (think "cp -r ...")
+func cpdir(src, dst string) error {
+	// Make sure src and dst exist and are directories
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if !srcInfo.IsDir() {
+		return fmt.Errorf("%q is not a directory", src)
+	}
+
+	dstInfo, err := os.Stat(dst)
+	if err != nil {
+		return err
+	}
+	if !dstInfo.IsDir() {
+		return fmt.Errorf("%q is not a directory", dst)
+	}
+
+	walkFn := func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() {
+			return nil // ignore
+		}
+
+		// TODO: async io.Copy?
+		newPath := strings.Replace(p, src, dst, 1)
+		fmt.Println("copying", p, "to", newPath)
+
+		if err := mkdir(filepath.Dir(newPath)); err != nil {
+			return err
+		}
+
+		r, err := os.Open(p)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+
+		w, err := os.Create(newPath)
+		if err != nil {
+			return err
+		}
+		defer w.Close()
+
+		_, err = io.Copy(w, r)
+		return err
+	}
+
+	return filepath.WalkDir(src, walkFn)
 }
 
 // slugify creates a URL safe string by removing all non-alphanumeric
