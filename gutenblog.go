@@ -19,6 +19,14 @@ import (
 	"github.com/anschwa/gutenblog/gml"
 )
 
+var gutenlog *log.Logger
+
+func init() {
+	if gutenlog == nil {
+		gutenlog = log.Default()
+	}
+}
+
 // The idea is to walk through each blog directory, generate posts,
 // then write everything as HTML to an output directory. From there we
 // can serve it back with http.FileServer.
@@ -180,7 +188,7 @@ func (s *site) generate() error {
 				}
 				defer w.Close()
 
-				postHTML := p.body.HTML(&gml.HTMLOptions{Minified: false})
+				postHTML := p.body.HTML(&gml.HTMLOptions{Minified: true})
 				postTmpl := template.Must(template.New("post").Parse(postHTML))
 				tmpl := template.Must(postTmpl.ParseFiles(baseTmplPath, postTmplPath))
 
@@ -215,11 +223,11 @@ func (s *site) serve(port string) {
 	fs := http.FileServer(http.Dir(s.outDir))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s\t%s", r.Method, r.URL)
+		gutenlog.Printf("%s\t%s", r.Method, r.URL)
 
 		// Regenerate the blog on with each request
 		if err := s.generate(); err != nil {
-			log.Printf("Error generating blog: %v", err)
+			gutenlog.Printf("Error generating blog: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -246,14 +254,14 @@ func (s *site) serve(port string) {
 		<-sigint
 
 		if err := srv.Shutdown(context.Background()); err != nil {
-			log.Printf("Error shutting down server: %v", err)
+			gutenlog.Printf("Error shutting down server: %v", err)
 		}
 		close(idleConns)
 	}()
 
-	log.Printf("Starting server on: %s [%s]", srv.Addr, s.outDir)
+	gutenlog.Printf("Starting server on: %s [%s]", srv.Addr, s.outDir)
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("Error starting server: %v", err)
+		gutenlog.Fatalf("Error starting server: %v", err)
 	}
 
 	<-idleConns
@@ -348,7 +356,13 @@ func newSoloSite(rootDir, outDir string) (*site, error) {
 	return s, nil
 }
 
-func New(rootDir, outDir string) (*site, error) {
+// New initializes a new gutenblog site. If the provided logger is
+// nil then the default logger is used instead.
+func New(rootDir, outDir string, logger *log.Logger) (*site, error) {
+	if logger != nil {
+		gutenlog = logger
+	}
+
 	multi, err := isMultiBlog(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("error determining blog layout: %w", err)
@@ -553,7 +567,8 @@ func cpdir(src, dst string) error {
 		return fmt.Errorf("%q is not a directory", dst)
 	}
 
-	walkFn := func(p string, d fs.DirEntry, err error) error {
+	// TODO: async io.Copy?
+	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -562,9 +577,8 @@ func cpdir(src, dst string) error {
 			return nil // ignore
 		}
 
-		// TODO: async io.Copy?
 		newPath := strings.Replace(p, src, dst, 1)
-		fmt.Println("copying", p, "to", newPath)
+		gutenlog.Printf("copying %q to %q", p, newPath)
 
 		if err := mkdir(filepath.Dir(newPath)); err != nil {
 			return err
@@ -584,9 +598,7 @@ func cpdir(src, dst string) error {
 
 		_, err = io.Copy(w, r)
 		return err
-	}
-
-	return filepath.WalkDir(src, walkFn)
+	})
 }
 
 // slugify creates a URL safe string by removing all non-alphanumeric

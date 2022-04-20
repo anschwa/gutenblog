@@ -530,33 +530,19 @@ func Parse(s string) (Document, error) {
 
 func textToHTML(s string) string {
 	// Keep it simple (TODO: better lexer)
+
 	var replacements = [...]struct {
 		re   *regexp.Regexp
 		repl string
 	}{
-		{regexp.MustCompile(`(\s?)/(.+)/(\s)`), `$1<em>$2</em>$3`},                            // Italic (very broken)
-		{regexp.MustCompile(`(\s?)\*(.+)\*(\s)`), `$1<strong>$2</strong>$3`},                  // Bold
-		{regexp.MustCompile(`(\s?)~(.+)~(\s)`), `$1<code>$2</code>$3`},                        // Code (broken)
-		{regexp.MustCompile(`\[(\d+)\]`), `<a id="fnr.$1" href="#fn.$1"><sup>[$1]</sup></a>`}, // Footnote
-		{regexp.MustCompile(`\n`), ``},                                                        // Strip newlines
+		{regexp.MustCompile(`(\s?)(https://[^\s]+)`), `$1<a href="$2">$2</a>`},                   // Raw URL
+		{regexp.MustCompile(`\[fn:(\d+)\]`), `<a id="fnr.$1" href="#fn.$1"><sup>[$1]</sup></a>`}, // Footnote
+		{regexp.MustCompile(`\n`), ``}, // Strip newlines
 	}
 
 	withHTML := s
 	for _, sub := range replacements {
 		withHTML = sub.re.ReplaceAllString(withHTML, sub.repl)
-	}
-
-	// URLs
-	reURL := regexp.MustCompile(`\[(.*)\]\((.+)\)`)
-	if allURLs := reURL.FindAllStringSubmatch(withHTML, -1); allURLs != nil {
-		for _, match := range allURLs {
-			original, text, href := match[0], match[1], match[2]
-			if text == "" {
-				text = href
-			}
-
-			withHTML = strings.Replace(withHTML, original, fmt.Sprintf(`<a href="%s">%s</a>`, href, text), 1)
-		}
 	}
 
 	return withHTML
@@ -575,6 +561,10 @@ func slugify(slug string) string {
 	// Remove duplicate hyphens
 	reDupDash := regexp.MustCompile(`-+`)
 	slug = reDupDash.ReplaceAllString(slug, "-")
+
+	// Remove HTML tags
+	reTag := regexp.MustCompile(`<[^>]+>`)
+	slug = reTag.ReplaceAllString(slug, "")
 
 	// Remove non-word chars
 	reNonWord := regexp.MustCompile(`[^0-9A-Za-z_-]`)

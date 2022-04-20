@@ -1,20 +1,32 @@
 %title Hello world
 %date 2022-03-21
 
-Mi eget mauris pharetra et ultrices neque ornare aenean euismod
-elementum nisi, quis eleifend quam adipiscing vitae proin sagittis,
-nisl. Dictum at tempor commodo, ullamcorper a lacus vestibulum sed
-arcu.
+* Heading
+
+Mi eget <em>mauris</em> pharetra et <strong>ultrices</strong> neque
+ornare aenean euismod elementum nisi, quis eleifend quam adipiscing
+vitae proin sagittis, nisl. https://example.com Dictum at tempor
+commodo, ullamcorper a lacus vestibulum sed arcu.
+
+1. first
+2. second
 
 Accumsan, lacus vel facilisis volutpat, est velit? Vulputate enim
 nulla aliquet porttitor lacus, luctus accumsan tortor posuere ac ut
 consequat semper viverra nam libero justo, laoreet sit amet cursus
-sit.
+sit.[fn:1]
 
 Eu tincidunt tortor aliquam nulla facilisi cras fermentum, odio eu
 feugiat pretium, nibh ipsum consequat nisl, vel? Amet commodo nulla
 facilisi nullam vehicula ipsum a arcu cursus vitae congue Maurois?
 
+- one
+- two
+- three
+
 Tincidunt dui ut ornare lectus sit amet? Senectus et netus et
 malesuada fames ac turpis egestas maecenas pharetra convallis posuere
 morbi leo urna, molestie at elementum eu, facilisis sed odio?
+
+%footnotes
+- [1] example
