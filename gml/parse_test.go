@@ -30,11 +30,22 @@ var parseTests = []parseTest{
 	},
 	{
 		"paragraph with styled text",
-		"this is <em>my</em> <strong>markup language</strong> called <code>GML</code> ",
+		"this is <em>my</em> <strong>markup language</strong> called <code>GML</code>",
 		`<article>
 <header>
 </header>
-<p>this is <em>my</em> <strong>markup language</strong> called <code>GML</code> </p>
+<p>this is <em>my</em> <strong>markup language</strong> called <code>GML</code></p>
+</article>`,
+	},
+	{
+		"paragraph with line breaks",
+		"foo\nbar\nbaz",
+		`<article>
+<header>
+</header>
+<p>foo
+bar
+baz</p>
 </article>`,
 	},
 	{

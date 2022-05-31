@@ -537,13 +537,15 @@ func textToHTML(s string) string {
 	}{
 		{regexp.MustCompile(`(\s?)(https://[^\s]+)`), `$1<a href="$2">$2</a>`},                   // Raw URL
 		{regexp.MustCompile(`\[fn:(\d+)\]`), `<a id="fnr.$1" href="#fn.$1"><sup>[$1]</sup></a>`}, // Footnote
-		{regexp.MustCompile(`\n`), ``}, // Strip newlines
 	}
 
 	withHTML := s
 	for _, sub := range replacements {
 		withHTML = sub.re.ReplaceAllString(withHTML, sub.repl)
 	}
+
+	// Strip trailing spaces
+	withHTML = strings.TrimSpace(withHTML)
 
 	return withHTML
 }

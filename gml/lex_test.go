@@ -73,8 +73,8 @@ var lexTests = []lexTest{
 	},
 	{
 		"paragraph",
-		"This is /my/ *markup language* called ~GML~\nClick [here](https://example.com)!",
-		[]item{{itemParagraph, "This is /my/ *markup language* called ~GML~\nClick [here](https://example.com)!", 0}, {itemEOF, "", 78}},
+		"This is <em>my</em> <strong>markup language</strong> called <code>GML</code>\nThis is a link: https://example.com\nGoodbye.",
+		[]item{{itemParagraph, "This is <em>my</em> <strong>markup language</strong> called <code>GML</code>\nThis is a link: https://example.com\nGoodbye.", 0}, {itemEOF, "", 121}},
 	},
 	{
 		"unordered list",
