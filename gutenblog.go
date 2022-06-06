@@ -40,11 +40,9 @@ func init() {
 //
 // Solo-blog:
 //  - Root directory contains "posts/"
-//  - gutenblog serve --name="My Blog" .
 //
 // Multi-blog:
 // - Root directory contains "blog/"
-// - gutenblog serve --addr=0.0.0.0:8080
 //
 // Templates:
 //   There are three HTML templates that are used for each blog: "base",
@@ -234,7 +232,7 @@ func (s *site) generate() error {
 	return nil
 }
 
-func (s *site) serve(port string) {
+func (s *site) serve(addr string) {
 	fs := http.FileServer(http.Dir(s.outDir))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +256,7 @@ func (s *site) serve(port string) {
 	// - https://pkg.go.dev/net/http#ServeMux
 	// - https://pkg.go.dev/net/http#Server.Shutdown
 	srv := &http.Server{
-		Addr:    "0.0.0.0:" + port,
+		Addr:    addr,
 		Handler: mux,
 	}
 
@@ -398,8 +396,8 @@ func New(rootDir, outDir string, logger *log.Logger) (*site, error) {
 	return s, nil
 }
 
-func (s *site) Serve(port string) {
-	s.serve(port)
+func (s *site) Serve(addr string) {
+	s.serve(addr)
 }
 
 func (s *site) Build() error {
