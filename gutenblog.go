@@ -183,6 +183,13 @@ func (s *site) generate() error {
 					return fmt.Errorf("error creating postDir %q: %w", postDir, err)
 				}
 
+				// Copy over the files from the original post directory
+				srcDir := filepath.Dir(p.path)
+				if err := cpdir(srcDir, postDir); err != nil {
+					return fmt.Errorf("error copying contents of post %q: %w ", srcDir, err)
+				}
+
+				// Generate post HTML
 				postPath := filepath.Join(postDir, "index.html")
 				w, err := os.Create(postPath)
 				if err != nil {
@@ -286,6 +293,8 @@ type post struct {
 	href  string
 	date  date
 	body  gml.Document
+
+	path string
 }
 
 // isMultiBlog determines whether the target directory contains a solo or multi-blog layout.
@@ -476,7 +485,7 @@ func getPosts(path string) (posts []*post, err error) {
 		}
 
 		// Parse post as GML
-		if info.Mode().IsRegular() && strings.HasSuffix(name, ".txt") {
+		if info.Mode().IsRegular() && strings.HasSuffix(name, ".gml.txt") {
 			f, err := os.Open(p)
 			if err != nil {
 				return fmt.Errorf("error opening %q: %w", name, err)
@@ -492,12 +501,13 @@ func getPosts(path string) (posts []*post, err error) {
 				return fmt.Errorf("error parsing %q: %w", name, err)
 			}
 
-			p := &post{
+			newPost := &post{
 				title: doc.Title(),
 				date:  date{doc.Date()},
 				body:  doc,
+				path:  p,
 			}
-			posts = append(posts, p)
+			posts = append(posts, newPost)
 		}
 
 		return nil
@@ -558,8 +568,17 @@ func mkdir(path string) error {
 	return nil
 }
 
-// cpdir recursively copies the contents of src into dst. (think "cp -r ...")
+var cpdirCache map[string]struct{}
+
+// cpdir recursively copies the contents of src into dst but will skip
+// previously copied filepaths on subsequent calls. This is mostly to
+// help eliminate redundant file copies when serving the site over
+// HTTP because it regenerates the entire site on each request.
 func cpdir(src, dst string) error {
+	if cpdirCache == nil {
+		cpdirCache = make(map[string]struct{})
+	}
+
 	// Make sure src and dst exist and are directories
 	srcInfo, err := os.Stat(src)
 	if err != nil {
@@ -587,6 +606,11 @@ func cpdir(src, dst string) error {
 			return nil // ignore
 		}
 
+		if _, exists := cpdirCache[p]; exists {
+			gutenlog.Printf("skipping %q", p)
+			return nil
+		}
+
 		newPath := strings.Replace(p, src, dst, 1)
 		gutenlog.Printf("copying %q to %q", p, newPath)
 
@@ -610,6 +634,7 @@ func cpdir(src, dst string) error {
 			return err
 		}
 
+		cpdirCache[p] = struct{}{} // add file to cache
 		return nil
 	})
 }

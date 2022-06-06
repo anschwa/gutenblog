@@ -1,0 +1,8 @@
+%title Hello Foo
+%date 2022-03-21
+
+This is Foo's blog
+
+%figure href="saturn.jpg"
+<img alt="saturn" src="saturn.jpg" />
+Aliquam malesuada bibendum arcu vitae elementum curabitur.
