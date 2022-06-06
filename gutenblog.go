@@ -63,6 +63,7 @@ type site struct {
 
 	// Store the filepath of all the web assets to prevent excessive copying of unchanged files
 	pathCache map[string]struct{}
+	multi     bool
 }
 
 type TmplArchive []struct {
@@ -123,13 +124,13 @@ func (s *site) generate() error {
 		gutenlog.Printf("generating %q", b.name)
 
 		var blogOutDir, blogBaseDir string
-		if len(s.blogs) == 1 {
-			blogOutDir = s.outDir // A solo-blog is the web root
-			blogBaseDir = "/"
-		} else {
+		if s.multi {
 			baseName := filepath.Base(b.name)
 			blogOutDir = filepath.Join(s.outDir, "blog", baseName)
 			blogBaseDir = filepath.Join("blog", baseName)
+		} else {
+			blogOutDir = s.outDir // A solo-blog is the web root
+			blogBaseDir = "/"
 		}
 
 		// Make sure output directory exists
@@ -141,6 +142,8 @@ func (s *site) generate() error {
 		baseTmplPath := filepath.Join(s.rootDir, blogBaseDir, "tmpl", "base.html.tmpl")
 		homeTmplPath := filepath.Join(s.rootDir, blogBaseDir, "tmpl", "home.html.tmpl")
 		postTmplPath := filepath.Join(s.rootDir, blogBaseDir, "tmpl", "post.html.tmpl")
+
+		postArchive := b.tmplArchive(filepath.Join("/", blogBaseDir))
 
 		// Generate blog home page
 		writeHome := func() error {
@@ -159,7 +162,7 @@ func (s *site) generate() error {
 			}{
 				DocumentTitle: "",
 				Posts:         b.posts,
-				Archive:       b.tmplArchive(filepath.Join("/", blogBaseDir)),
+				Archive:       postArchive,
 			}
 
 			if err := tmpl.ExecuteTemplate(w, "base", homeData); err != nil {
@@ -203,13 +206,15 @@ func (s *site) generate() error {
 					DocumentTitle string
 					PostHTML      string
 					Posts         map[date]*post
-					Archive       [][]date
+					Archive       TmplArchive
 				}{
 					DocumentTitle: p.title,
 					PostHTML:      postHTML,
 					Posts:         b.posts,
-					Archive:       b.archive,
+					Archive:       postArchive,
 				}
+
+				gutenlog.Printf("writing post: %q", p.path)
 				if err := tmpl.ExecuteTemplate(w, "base", postData); err != nil {
 					return fmt.Errorf("error executing template %q to %q: %w", postTmplPath, postPath, err)
 				}
@@ -237,10 +242,17 @@ func (s *site) serve(addr string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		gutenlog.Printf("%s\t%s", r.Method, r.URL)
-
 		// Regenerate the blog on with each request
+
+		s, err := newMultiSite(s.rootDir, s.outDir)
+		if err != nil {
+			gutenlog.Printf("Error getting latest blog entries: %s", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
 		if err := s.generate(); err != nil {
-			gutenlog.Printf("Error generating blog: %v", err)
+			gutenlog.Printf("Error generating blog: %s", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -282,7 +294,7 @@ func (s *site) serve(addr string) {
 
 type blog struct {
 	name    string         // The directory name (used for creating hyperlinks to blog posts)
-	posts   map[date]*post // Hold entire blog in memory?
+	posts   map[date]*post //
 	archive [][]date       // Posts sorted by Month+Year
 }
 
@@ -351,6 +363,7 @@ func newMultiSite(rootDir, outDir string) (*site, error) {
 		rootDir: rootDir,
 		outDir:  outDir,
 		blogs:   blogs,
+		multi:   true,
 	}
 
 	return s, nil
@@ -605,7 +618,7 @@ func cpdir(src, dst string) error {
 		}
 
 		if _, exists := cpdirCache[p]; exists {
-			gutenlog.Printf("skipping %q", p)
+			// gutenlog.Printf("skipping %q", p)
 			return nil
 		}
 
