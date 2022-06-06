@@ -44,10 +44,7 @@ func init() {
 //
 // Multi-blog:
 // - Root directory contains "blog/"
-// - gutenblog serve . \
-//       --blog='{dir: "blog/foo", name: "Foo the Blog"}' \
-//       --blog='{dir: "blog/bar", name: "Bar Bar Blog"}' \
-//       --addr=0.0.0.0:8080
+// - gutenblog serve --addr=0.0.0.0:8080
 //
 // Templates:
 //   There are three HTML templates that are used for each blog: "base",
@@ -65,6 +62,9 @@ type site struct {
 	rootDir string
 	outDir  string
 	blogs   []*blog
+
+	// Store the filepath of all the web assets to prevent excessive copying of unchanged files
+	pathCache map[string]struct{}
 }
 
 type TmplArchive []struct {
@@ -121,30 +121,32 @@ func (b *blog) tmplArchive(webRoot string) TmplArchive {
 // the www directory into outDir. generate will overwrite all existing
 // content within outDir but will create the directory if it does not yet exist.
 func (s *site) generate() error {
-	blogDirRoot := filepath.Join(s.outDir, "blog")
-	if len(s.blogs) == 1 {
-		blogDirRoot = s.outDir // A solo-blog is the web root
-	}
-
 	for _, b := range s.blogs {
-		blogWebRoot := "/"
-		if len(s.blogs) > 1 {
-			blogWebRoot = filepath.Join("/blog/", filepath.Base(b.name))
+		gutenlog.Printf("generating %q", b.name)
+
+		var blogOutDir, blogBaseDir string
+		if len(s.blogs) == 1 {
+			blogOutDir = s.outDir // A solo-blog is the web root
+			blogBaseDir = "/"
+		} else {
+			baseName := filepath.Base(b.name)
+			blogOutDir = filepath.Join(s.outDir, "blog", baseName)
+			blogBaseDir = filepath.Join("blog", baseName)
 		}
 
 		// Make sure output directory exists
-		if err := mkdir(blogDirRoot); err != nil {
-			return fmt.Errorf("error creating blogRoot %q: %w", blogDirRoot, err)
+		if err := mkdir(blogOutDir); err != nil {
+			return fmt.Errorf("error creating blogRoot %q: %w", blogOutDir, err)
 		}
 
 		// TOOD: cleanup solo vs multi site root vs. blog root mess
-		baseTmplPath := filepath.Join(s.rootDir, blogWebRoot, "tmpl", "base.html.tmpl")
-		homeTmplPath := filepath.Join(s.rootDir, blogWebRoot, "tmpl", "home.html.tmpl")
-		postTmplPath := filepath.Join(s.rootDir, blogWebRoot, "tmpl", "post.html.tmpl")
+		baseTmplPath := filepath.Join(s.rootDir, blogBaseDir, "tmpl", "base.html.tmpl")
+		homeTmplPath := filepath.Join(s.rootDir, blogBaseDir, "tmpl", "home.html.tmpl")
+		postTmplPath := filepath.Join(s.rootDir, blogBaseDir, "tmpl", "post.html.tmpl")
 
 		// Generate blog home page
 		writeHome := func() error {
-			homePath := filepath.Join(blogDirRoot, "index.html")
+			homePath := filepath.Join(blogOutDir, "index.html")
 			w, err := os.Create(homePath)
 			if err != nil {
 				return fmt.Errorf("error creating homePath %q: %w", homePath, err)
@@ -159,7 +161,7 @@ func (s *site) generate() error {
 			}{
 				DocumentTitle: "",
 				Posts:         b.posts,
-				Archive:       b.tmplArchive(blogWebRoot),
+				Archive:       b.tmplArchive(filepath.Join("/", blogBaseDir)),
 			}
 
 			if err := tmpl.ExecuteTemplate(w, "base", homeData); err != nil {
@@ -176,7 +178,7 @@ func (s *site) generate() error {
 		// Generate posts (embarrassingly parallel)
 		for _, p := range b.posts {
 			writePost := func(p *post) error {
-				postDir := filepath.Join(blogDirRoot, p.date.Format("2006/01/02"), slugify(p.title))
+				postDir := filepath.Join(blogOutDir, p.date.Format("2006/01/02"), slugify(p.title))
 				if err := mkdir(postDir); err != nil {
 					return fmt.Errorf("error creating postDir %q: %w", postDir, err)
 				}
@@ -214,6 +216,12 @@ func (s *site) generate() error {
 				return fmt.Errorf("error writing post %q: %w", p.title, err)
 			}
 		}
+	}
+
+	// Copy all new files from the www directory
+	webDir := filepath.Join(s.rootDir, "www")
+	if err := cpdir(webDir, s.outDir); err != nil {
+		return fmt.Errorf("error copying %q to %q : %w", webDir, s.outDir, err)
 	}
 
 	return nil
@@ -378,13 +386,15 @@ func New(rootDir, outDir string, logger *log.Logger) (*site, error) {
 		return nil, fmt.Errorf("error building site: %w", err)
 	}
 
-	webDir := filepath.Join(s.rootDir, "www")
-	if err := cpdir(webDir, s.outDir); err != nil {
-		return nil, fmt.Errorf("error copying %q to %q : %w", webDir, s.outDir, err)
-	}
-
-	s.serve("8080") // TODO: delete me
 	return s, nil
+}
+
+func (s *site) Serve(port string) {
+	s.serve(port)
+}
+
+func (s *site) Build() error {
+	return s.generate()
 }
 
 // getBlog builds a blog from a given filepath
@@ -596,8 +606,11 @@ func cpdir(src, dst string) error {
 		}
 		defer w.Close()
 
-		_, err = io.Copy(w, r)
-		return err
+		if _, err = io.Copy(w, r); err != nil {
+			return err
+		}
+
+		return nil
 	})
 }
 

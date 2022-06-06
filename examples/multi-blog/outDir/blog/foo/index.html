@@ -1,4 +1,3 @@
-{{define "base" -}}
 <!doctype html>
 <html lang="en">
   <head>
@@ -7,7 +6,7 @@
     <link rel="stylesheet" href="/css/style.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>{{- if ne $.DocumentTitle "" -}} {{$.DocumentTitle}} - {{- end -}}Foo's Blog</title>
+    <title>Foo's Blog</title>
   </head>
 
   <body>
@@ -17,9 +16,15 @@
     </header>
 
     <main role="main">
-      {{- template "content" . -}}
-    </main>
+<h2>Archive</h2>
+<h3>March 2022</h3>
+<ul>
+  <li>
+    <a href="/blog/foo/2022/03/21/hello-foo/index.html">Hello Foo</a>,
+    <small>Mar 21<sup>st</sup></small>
+  </li>
+</ul>
+</main>
   </body>
 
 </html>
-{{- end}}

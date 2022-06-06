@@ -4,6 +4,7 @@
   <head>
     <meta charset="utf-8"/>
     <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/css/style.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <title>{{- if ne $.DocumentTitle "" -}} {{$.DocumentTitle}} - {{- end -}}Bar's Blog</title>
@@ -11,11 +12,12 @@
 
   <body>
     <header>
-      <h1><a href="/">Bar's Blog</a></h1>
+      <a href="/">← multiblog</a>
+      <h1><a href="/blog/bar">Bar&rsquo;s Blog</a></h1>
     </header>
 
     <main role="main">
-      {{- template "content" -}}
+      {{- template "content" . -}}
     </main>
   </body>
 
