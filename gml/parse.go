@@ -143,7 +143,7 @@ func (h *heading) WriteHTML(w io.Writer, opts *HTMLOptions) (int, error) {
 	ref := slugify(h.text)
 
 	fmt.Fprintf(&b, `<h%d id="%s" class="heading">`, level, ref)
-	fmt.Fprintf(&b, `%s <a class="heading-ref" href="#%s">¶</a>`, textToHTML(h.text), ref)
+	fmt.Fprintf(&b, `%s <a class="heading-ref" href="#%s">#</a>`, textToHTML(h.text), ref)
 	fmt.Fprintf(&b, `</h%d>`, level)
 
 	return w.Write(b.Bytes())
