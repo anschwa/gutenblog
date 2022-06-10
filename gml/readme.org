@@ -6,90 +6,71 @@ I want to build a website generator, but first I need a markup
 language. I like org-mode and markdown but they each have enough
 quirks that I don't want to use them for this project.
 
-For Gutenblog v1.0 I chose to use raw, unaltered HTML. This was the
+For Gutenblog v1 I chose to use raw, unaltered HTML. This was the
 simplest to implement and offered the most flexibility for publishing
-web pages but it much less ergonomic than using something like markdown.
+web pages but it was much less ergonomic than using something like
+markdown.
 
-So I decided to implement my own markup language that bridges the this
-gap. GML is mostly focused on block-level elements and defers all
-inline-styling to HTML. There are far too many edge-cases around
-translating typographical elements out of plain-text that it's really
-not worth it when HTML is what we want in the end anyway.
+So for Gutenblog v2 I decided to implement my own markup language
+called Gutenblog Markup Language, or GML. GML is mostly focused on
+block-level elements and defers all inline-styling to HTML.
 
-* Examples
-GML Example:
-#+begin_example
-#+end_example
+While it may seem like there are only a few inline styles to consider
+(bold, italic, monospace) there are far too many edge-cases around
+translating typographical and/or semantic elements out of any
+conceivable plain-text representation that it's really not worth it to
+use special characters for inline styling when HTML is what we want in
+the end anyway.
 
-Output as HTML:
-#+begin_src html
-#+end_src
+As a result, GML does not offer its own plain-text inline styling
+rules, special characters, etc., nor does it attempt to do any
+pre-processing or escaping of the text within the document itself.
+
+However, GML does not make any guarantees about compatibility with
+HTML or any other markup format. Instead GML passes all text as it
+appears in the document directly into the desired output format
+verbatim. This conveniently allows for the use of HTML within GML
+documents being exported to HTML.
+
+Of course, GML makes a few exceptions to this rule in order to make
+drafting documents for the web a bit more ergonomic, such as
+processing hyperlinks and footnotes.
+
+In general, GML is only concerned with organizing a document into
+blocks of content and is not opinionated about how you markup the text
+within the blocks themselves.
 
 * GML Grammar (BNF)
-This is the grammar I came up with for brainstorming GML. I hope it's
-relatively complete but there are probably a few gaps.
+- ~{rule}~ means ~rule~ is repeatable
+- ~[rule]~ means ~rule~ is optional
 
-#+begin_example
-<document> ::= <metadata> <content> <eof>
+** Block Grammar
+#+begin_src text
+<document> ::= <metadata> {block} <eof>
 
 <metadata> ::= <key> <value> <eol>
-             | <key> <value> <eol> <metadata>
 
-<content> ::= <block>
-            | <block> <block>
-
-<block> ::= <heading> <styled-text> <eol>
+<block> ::=
           | <paragraph>
-          | <list>
-          | <blockquote>
-          | <figure>
-          | <pre>
-          | <html>
-          | <footnotes>
+          | <keyword-block>
 
-<paragraph> ::= <styled-text> <empty-line>
-              | <styled-text> <styled-text>
+<keyword-block> ::= <keyword> [arguments] <eol> <content> <empty-line>
 
-<blockquote> ::= "%blockquote" <eol> <styled-text> <empty-line>
+<keyword> ::=
+            | "%list"
+            | "%figure"
+            | "%section"
+            | "%footnotes"
+            | "%blockquote"
+#+end_src
 
-<figure> ::= "%figure" <arguments> <eol> <html> <eol> <caption> <empty-line>
+** Inline Grammar
+#+begin_src text
+<content> ::= [text] [footnote] [hyperlink]
 
-<pre> ::= "%pre" <eol> <text> <empty-line>
+<footnote> ::= "[fn:" <number> "]"
 
-<html> ::= "%html" <eol> <text> <empty-line>
+<hyperlink> ::= "[[https://" <text> "]" [description] "]"
 
-<footnotes> ::= "%footnotes" <eol> <list>
-
-<styled-text> ::= <text>
-                | <url>
-                | <html>
-                | <footnote>
-
-<list> ::= <list-item> <empty-line>
-         | <list-item> <list-item>
-
-<list-item> ::= "-" <styled-text> <eol>
-              | <number> "." <styled-text> <eol>
-
-<footnote> ::= ""
-             | "[fn:" <number> "]"
-
-<url> ::= "https://" <text> <space>
-
-<key> ::= "%title"
-        | "%subtitle"
-        | "%date"
-
-<heading> ::= "*"
-            | "**"
-            | "***"
-
-<arguments> ::= ""
-              | <text>
-
-<caption> ::= ""
-            | <text>
-
-<value> ::= <text>
-<html> ::= <text>
-#+end_example
+<description> ::= "[" <text> "]"
+#+end_src
