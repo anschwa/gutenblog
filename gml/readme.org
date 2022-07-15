@@ -43,18 +43,19 @@ within the blocks themselves.
 * GML Grammar (BNF)
 - ~{rule}~ means ~rule~ is repeatable
 - ~[rule]~ means ~rule~ is optional
+- ~<rule>~ is a regular rule
 
 ** Block Grammar
 #+begin_src text
-<document> ::= <metadata> {block} <eof>
+<document> ::= {metadata} {block} <eof>
 
-<metadata> ::= <key> <value> <eol>
+<metadata> ::= <key> {space} <value> <eol>
 
 <block> ::=
           | <paragraph>
           | <keyword-block>
 
-<keyword-block> ::= <keyword> [arguments] <eol> <content> <empty-line>
+<keyword-block> ::= <keyword> {space} [arguments] <eol> <content> <empty-line>
 
 <keyword> ::=
             | "%list"
@@ -70,7 +71,5 @@ within the blocks themselves.
 
 <footnote> ::= "[fn:" <number> "]"
 
-<hyperlink> ::= "[[https://" <text> "]" [description] "]"
-
-<description> ::= "[" <text> "]"
+<hyperlink> ::= "[[https://" <text> "][" [text] "]]"
 #+end_src
