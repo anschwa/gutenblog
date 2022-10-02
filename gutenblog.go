@@ -664,8 +664,8 @@ func slugify(slug string) string {
 	reDupDash := regexp.MustCompile(`-+`)
 	slug = reDupDash.ReplaceAllString(slug, "-")
 
-	// Remove non-word chars
-	reNonWord := regexp.MustCompile(`[^0-9A-Za-z_-]`)
+	// Remove non-word chars (Unicode character classes)
+	reNonWord := regexp.MustCompile(`[^\p{N}\p{L}_-]`)
 	slug = reNonWord.ReplaceAllString(slug, "")
 
 	// Lowercase
